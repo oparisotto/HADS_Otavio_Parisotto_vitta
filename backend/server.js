@@ -4,6 +4,7 @@ const pool = require("./db");
 const authRoutes = require("./routes/auth");
 const planosRoutes = require("./routes/planos");
 const pagamentosRoutes = require("./routes/pagamentos");
+const checkinsRoutes = require("./routes/checkins");
 require("dotenv").config();
 
 const app = express();
@@ -12,6 +13,7 @@ app.use(express.json());
 app.use("/auth", authRoutes);
 app.use("/planos", planosRoutes);
 app.use("/pagamentos", pagamentosRoutes);
+app.use("/checkins", checkinsRoutes);
 app.get("/", (req, res) =>{
     res.send("API Vitta rodando 🚀")
 });
