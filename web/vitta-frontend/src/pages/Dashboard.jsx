@@ -54,7 +54,7 @@ export default function Dashboard() {
           }));
         }
 
-        // Preencher dias sem check-in
+        // Preencher dias sem check-in e formatar para dd/mm
         const dias = [];
         const dataInicio = new Date(seteDiasAtras);
         const dataFim = new Date(hoje);
@@ -64,9 +64,10 @@ export default function Dashboard() {
         }, {});
 
         for (let d = new Date(dataInicio); d <= dataFim; d.setDate(d.getDate() + 1)) {
-          const dataStr = d.toISOString().split("T")[0];
+          const dataStr = d.toISOString().split("T")[0]; // yyyy-mm-dd
+          const diaMes = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
           dias.push({
-            data: dataStr,
+            data: diaMes,
             total: checkinsMap[dataStr] || 0
           });
         }
