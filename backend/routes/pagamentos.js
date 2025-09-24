@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 
+// Criar pagamento
 router.post("/", async (req, res) => {
   const { usuario_id, plano_id, status, data_pagamento, data_vencimento } = req.body;
   try {
@@ -15,6 +16,17 @@ router.post("/", async (req, res) => {
   }
 });
 
+// 🔹 Buscar TODOS os pagamentos
+router.get("/", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM pagamentos");
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 🔹 Buscar pagamentos por usuário
 router.get("/:usuario_id", async (req, res) => {
   const { usuario_id } = req.params;
   try {
@@ -28,6 +40,7 @@ router.get("/:usuario_id", async (req, res) => {
   }
 });
 
+// Atualizar status do pagamento
 router.put("/:id", async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
