@@ -40,7 +40,7 @@ router.post("/login", async (req, res) => {
             return res.status(400).json({ message: "Senha inválida" });
         }
 
-        res.json({ message: "Login realizado com sucesso!", user: user.rows[0]});
+        res.json({ message: "Login realizado com sucesso!", });
     } catch (err) {
         res.status(500).json({ message: err.message});
     }
