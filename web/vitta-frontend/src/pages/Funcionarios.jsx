@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaTrash, FaEdit } from "react-icons/fa";
+import { FaTrash, FaEdit, FaSave } from "react-icons/fa";
 
 export default function Funcionarios() {
   const [funcionarios, setFuncionarios] = useState([]);
@@ -147,7 +147,7 @@ export default function Funcionarios() {
       </div>
       <button
         onClick={adicionarFuncionario}
-        className="bg-blue-600 text-white px-4 py-2 rounded mb-4"
+        className="bg-blue-600 text-white px-4 py-2 rounded mb-4 hover:bg-blue-700 transition"
       >
         Adicionar Funcionário
       </button>
@@ -156,19 +156,19 @@ export default function Funcionarios() {
       <table className="w-full mt-6 border">
         <thead>
           <tr className="bg-gray-200">
-            <th className="p-2 border">ID</th>
-            <th className="p-2 border">Nome</th>
-            <th className="p-2 border">Email</th>
-            <th className="p-2 border">Cargo</th>
-            <th className="p-2 border">Senha</th>
-            <th className="p-2 border text-right">Ações</th>
+            <th className="p-2 text-center">ID</th>
+            <th className="p-2 text-center">Nome</th>
+            <th className="p-2 text-center">Email</th>
+            <th className="p-2 text-center">Cargo</th>
+            <th className="p-2 text-center">Senha</th>
+            <th className="p-2 text-center">Ações</th>
           </tr>
         </thead>
         <tbody>
           {funcionarios.map((f) => (
-            <tr key={f.id}>
-              <td className="p-2 border">{f.id}</td>
-              <td className="p-2 border">
+            <tr key={f.id} className="border-t">
+              <td className="p-2 text-center">{f.id}</td>
+              <td className="p-2 text-center">
                 {editandoId === f.id ? (
                   <input
                     type="text"
@@ -182,7 +182,7 @@ export default function Funcionarios() {
                   f.nome
                 )}
               </td>
-              <td className="p-2 border">
+              <td className="p-2 text-center">
                 {editandoId === f.id ? (
                   <input
                     type="email"
@@ -196,7 +196,7 @@ export default function Funcionarios() {
                   f.email
                 )}
               </td>
-              <td className="p-2 border">
+              <td className="p-2 text-center">
                 {editandoId === f.id ? (
                   <input
                     type="text"
@@ -210,7 +210,7 @@ export default function Funcionarios() {
                   f.cargo
                 )}
               </td>
-              <td className="p-2 border">
+              <td className="p-2 text-center">
                 {editandoId === f.id ? (
                   <input
                     type="password"
@@ -224,29 +224,29 @@ export default function Funcionarios() {
                   "******"
                 )}
               </td>
-              <td className="p-2 border text-left">
+              <td className="p-2 text-center">
                 {editandoId === f.id ? (
                   <button
                     onClick={() => salvarEdicao(f.id)}
-                    className="bg-green-600 text-white px-3 py-1 rounded flex items-center gap-1"
+                    className="bg-green-600 text-white px-3 py-1 rounded flex items-center justify-center gap-1 hover:bg-green-700 transition"
                   >
-                    <FaEdit /> Salvar
+                    <FaSave /> Salvar
                   </button>
                 ) : (
-                  <>
+                  <div className="flex justify-center gap-2">
                     <button
                       onClick={() => iniciarEdicao(f)}
-                      className= "bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1"
+                      className="bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-blue-700 transition"
                     >
                       <FaEdit /> Editar
                     </button>
                     <button
                       onClick={() => deletarFuncionario(f.id)}
-                      className="bg-red-600 text-white px-3 py-1 rounded flex items-center gap-1"
+                      className="bg-red-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-red-700 transition"
                     >
                       <FaTrash /> Deletar
                     </button>
-                  </>
+                  </div>
                 )}
               </td>
             </tr>
