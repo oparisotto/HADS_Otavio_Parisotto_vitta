@@ -1,36 +1,45 @@
-// src/components/Sidebar.jsx
-import { Home, User, Users, FileText, DollarSign } from "lucide-react";
-import { NavLink } from "react-router-dom";
-
-const menuItems = [
-  { name: "Dashboard", icon: <Home size={20} />, path: "/dashboard" },
-  { name: "Alunos", icon: <Users size={20} />, path: "/alunos" },
-  { name: "Funcionários", icon: <User size={20} />, path: "/funcionarios" },
-  { name: "Planos", icon: <FileText size={20} />, path: "/planos" },
-  { name: "Relatórios", icon: <DollarSign size={20} />, path: "/relatorios" },
-];
+import { NavLink, useNavigate } from "react-router-dom";
+import { FaHome, FaUser, FaUsers, FaFileInvoiceDollar, FaSignOutAlt } from "react-icons/fa";
 
 export default function Sidebar() {
-  return (
-    <div className="w-64 h-screen bg-gray-900 text-white flex flex-col p-6">
-      <h1 className="text-2xl font-bold mb-10">Vitta Gestor</h1>
+  const navigate = useNavigate();
 
-      <nav className="flex flex-col gap-3">
-        {menuItems.map((item) => (
-          <NavLink
-            key={item.name}
-            to={item.path}
-            className={({ isActive }) =>
-              `flex items-center gap-3 p-3 rounded hover:bg-gray-800 transition-colors ${
-                isActive ? "bg-gray-800 font-semibold" : "font-medium"
-              }`
-            }
-          >
-            {item.icon}
-            <span>{item.name}</span>
-          </NavLink>
-        ))}
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("usuario");
+    navigate("/auth");
+  };
+
+  const linkClasses = ({ isActive }) =>
+    `flex items-center gap-2 px-4 py-3 rounded hover:bg-gray-200 transition ${
+      isActive ? "bg-green-600 text-white" : "text-gray-700"
+    }`;
+
+  return (
+    <aside className="w-64 bg-white border-r shadow-md flex flex-col">
+      <div className="p-6 text-center font-bold text-xl text-green-600 border-b">Vitta</div>
+
+      <nav className="flex-1 mt-4">
+        <NavLink to="/dashboard" className={linkClasses}>
+          <FaHome /> Dashboard
+        </NavLink>
+        <NavLink to="/alunos" className={linkClasses}>
+          <FaUsers /> Alunos
+        </NavLink>
+        <NavLink to="/funcionarios" className={linkClasses}>
+          <FaUser /> Funcionários
+        </NavLink>
+        <NavLink to="/planos" className={linkClasses}>
+          <FaFileInvoiceDollar /> Planos
+        </NavLink>
       </nav>
-    </div>
+
+      <button
+        onClick={handleLogout}
+        className="flex items-center gap-2 px-4 py-3 m-6 mt-auto text-red-600 rounded hover:bg-red-100 transition"
+      >
+        <FaSignOutAlt /> Sair
+      </button>
+    </aside>
   );
 }

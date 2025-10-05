@@ -4,7 +4,6 @@ import Dashboard from "./pages/Dashboard";
 import Alunos from "./pages/Alunos";
 import Funcionarios from "./pages/Funcionarios";
 import Planos from "./pages/Planos";
-import Relatorios from "./pages/Relatorios";
 import Sidebar from "./components/Sidebar";
 
 function App() {
@@ -21,7 +20,6 @@ function App() {
             <Route path="/alunos" element={<Alunos />} />
             <Route path="/funcionarios" element={<Funcionarios />} />
             <Route path="/planos" element={<Planos />} />
-            <Route path="/relatorios" element={<Relatorios />} />
             {/* Rota padrão */}
             <Route path="*" element={<Dashboard />} />
           </Routes>

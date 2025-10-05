@@ -1,65 +1,90 @@
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
-const pool = require("../db");
+const pool = require("../db"); // seu pool de conexão PostgreSQL
 
-router.post("/register", async (req, res) => {
-    const {nome, email, senha, tipo} = req.body;
-
-    try{
-        const userExists = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
-        if (userExists.rows.length > 0){
-            return res.status(400).json({ message: "Email já cadastrado"});
-        }
-
-        const hashedPassword = await bcrypt.hash(senha, 10);
-
-        const newUser = await pool.query(
-            "INSERT INTO usuarios (nome, email, senha, tipo) VALUES ($1, $2, $3, $4) RETURNING *",
-            [nome, email, hashedPassword, tipo || "aluno"]
-        );
-
-        res.status(201).json({ message: "Usuário cadastrado com sucesso!", user: newUser.rows[0] });
-    } catch (err) {
-        res.status(500).json({ messge: err.message });
-    }
-});
-
+// =================== LOGIN FUNCIONÁRIO ===================
 router.post("/login", async (req, res) => {
-    const { email, senha } = req.body;
+  const { email, senha } = req.body;
 
-    try {
-        const user = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
+  try {
+    // Buscar funcionário pelo email
+    const result = await pool.query(
+      "SELECT * FROM funcionarios WHERE email = $1",
+      [email]
+    );
 
-        if (user.rows.length === 0){
-            return res.status(400).json({ message: "Usuário não encontrado"})
-        }
-
-        const validPassword = await bcrypt.compare(senha, user.rows[0].senha);
-        if (!validPassword){
-            return res.status(400).json({ message: "Senha inválida" });
-        }
-
-        res.json({ message: "Login realizado com sucesso!", });
-    } catch (err) {
-        res.status(500).json({ message: err.message});
+    if (result.rows.length === 0) {
+      return res.status(400).json({ msg: "Funcionário não encontrado" });
     }
+
+    const funcionario = result.rows[0];
+
+    // Comparar senha
+    const isMatch = await bcrypt.compare(senha, funcionario.senha);
+    if (!isMatch) {
+      return res.status(400).json({ msg: "Senha incorreta" });
+    }
+
+    // Login bem-sucedido
+    res.json({
+      msg: "Login realizado com sucesso",
+      funcionario: {
+        id: funcionario.id,
+        nome: funcionario.nome,
+        email: funcionario.email,
+        cargo: funcionario.cargo,
+        data_admissao: funcionario.data_admissao
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Erro no servidor" });
+  }
 });
 
-router.post("/recover", async (req, res) => {
-    const { email } = req.body;
+// =================== REGISTRAR FUNCIONÁRIO ===================
+router.post("/register", async (req, res) => {
+  const { nome, email, senha, cargo } = req.body;
 
-    try {
-        const user = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
-
-        if (user.rows.length === 0 ){
-            return res.status(400).json({ message: "Usuário não encontrado"});
-        }
-
-        res.json({ message: `Instruções de recuperação enviadas para ${email} `});
-    } catch (err){
-        res.status(500).json({ message: err.message});
+  try {
+    // Verificar se já existe funcionário com o email
+    const existing = await pool.query(
+      "SELECT * FROM funcionarios WHERE email = $1",
+      [email]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ msg: "Email já cadastrado" });
     }
+
+    // Criptografar senha
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(senha, salt);
+
+    // Inserir no banco
+    const result = await pool.query(
+      "INSERT INTO funcionarios (nome, email, senha, cargo, data_admissao) VALUES ($1, $2, $3, $4, NOW()) RETURNING *",
+      [nome, email, hashedPassword, cargo]
+    );
+
+    const novoFuncionario = result.rows[0];
+
+    res.json({
+      msg: "Funcionário cadastrado com sucesso",
+      funcionario: {
+        id: novoFuncionario.id,
+        nome: novoFuncionario.nome,
+        email: novoFuncionario.email,
+        cargo: novoFuncionario.cargo,
+        data_admissao: novoFuncionario.data_admissao
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Erro no servidor" });
+  }
 });
 
 module.exports = router;
