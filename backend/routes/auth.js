@@ -1,90 +1,115 @@
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
-const pool = require("../db"); // seu pool de conexão PostgreSQL
+const jwt = require("jsonwebtoken");
+const nodemailer = require("nodemailer");
+const pool = require("../db");
 
-// =================== LOGIN FUNCIONÁRIO ===================
+const SECRET = process.env.JWT_SECRET;
+
+// -------------------- LOGIN --------------------
 router.post("/login", async (req, res) => {
-  const { email, senha } = req.body;
-
+    const { email, senha } = req.body;
   try {
-    // Buscar funcionário pelo email
-    const result = await pool.query(
-      "SELECT * FROM funcionarios WHERE email = $1",
-      [email]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(400).json({ msg: "Funcionário não encontrado" });
-    }
+    const result = await pool.query("SELECT * FROM funcionarios WHERE email = $1", [email]);
+    if (result.rows.length === 0)
+      return res.status(404).json({ message: "Usuário não encontrado" });
 
     const funcionario = result.rows[0];
 
-    // Comparar senha
-    const isMatch = await bcrypt.compare(senha, funcionario.senha);
-    if (!isMatch) {
-      return res.status(400).json({ msg: "Senha incorreta" });
+    if (!funcionario.senha) {
+      return res.status(500).json({ message: "Usuário sem senha válida" });
     }
 
-    // Login bem-sucedido
-    res.json({
-      msg: "Login realizado com sucesso",
-      funcionario: {
-        id: funcionario.id,
-        nome: funcionario.nome,
-        email: funcionario.email,
-        cargo: funcionario.cargo,
-        data_admissao: funcionario.data_admissao
-      }
-    });
+    const senhaValida = await bcrypt.compare(senha, funcionario.senha);
+    if (!senhaValida) return res.status(401).json({ message: "Senha incorreta" });
 
+    if (!SECRET) {
+      console.error("JWT_SECRET não definido no .env");
+      return res.status(500).json({ message: "Erro interno no servidor" });
+    }
+
+    const token = jwt.sign({ id: funcionario.id, cargo: funcionario.cargo }, SECRET, { expiresIn: "8h" });
+
+    res.json({ token, funcionario });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: "Erro no servidor" });
+    console.error("Erro no login:", err);
+    res.status(500).json({ message: "Erro interno no servidor", error: err.message });
   }
 });
 
-// =================== REGISTRAR FUNCIONÁRIO ===================
+// -------------------- REGISTRO --------------------
 router.post("/register", async (req, res) => {
   const { nome, email, senha, cargo } = req.body;
-
   try {
-    // Verificar se já existe funcionário com o email
-    const existing = await pool.query(
-      "SELECT * FROM funcionarios WHERE email = $1",
-      [email]
-    );
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ msg: "Email já cadastrado" });
-    }
+    const existe = await pool.query("SELECT * FROM funcionarios WHERE email = $1", [email]);
+    if (existe.rows.length > 0) return res.status(400).json({ message: "Email já cadastrado" });
 
-    // Criptografar senha
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(senha, salt);
-
-    // Inserir no banco
-    const result = await pool.query(
-      "INSERT INTO funcionarios (nome, email, senha, cargo, data_admissao) VALUES ($1, $2, $3, $4, NOW()) RETURNING *",
-      [nome, email, hashedPassword, cargo]
+    const hash = await bcrypt.hash(senha, 10);
+    await pool.query(
+      "INSERT INTO funcionarios (nome, email, senha, cargo, data_admissao) VALUES ($1, $2, $3, $4, NOW())",
+      [nome, email, hash, cargo || "funcionario"]
     );
 
-    const novoFuncionario = result.rows[0];
-
-    res.json({
-      msg: "Funcionário cadastrado com sucesso",
-      funcionario: {
-        id: novoFuncionario.id,
-        nome: novoFuncionario.nome,
-        email: novoFuncionario.email,
-        cargo: novoFuncionario.cargo,
-        data_admissao: novoFuncionario.data_admissao
-      }
-    });
-
+    res.json({ message: "Funcionário registrado com sucesso" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ msg: "Erro no servidor" });
+    res.status(500).json({ message: "Erro ao registrar" });
   }
+});
+
+// -------------------- RECUPERAR SENHA --------------------
+let codigosRecuperacao = {}; // Armazena códigos temporariamente
+
+router.post("/forgot-password", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: "Email é obrigatório" });
+
+  try {
+    const result = await pool.query("SELECT * FROM funcionarios WHERE email = $1", [email]);
+    if (result.rows.length === 0)
+      return res.status(404).json({ message: "Email não encontrado" });
+
+    const codigo = Math.floor(100000 + Math.random() * 900000);
+    codigosRecuperacao[email] = codigo;
+
+    // Cria transporter universal
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: process.env.SMTP_SECURE === "true",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: `"Academia Vitta" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: "Recuperação de Senha - Vitta",
+      text: `Olá! Seu código de recuperação é: ${codigo}`,
+    });
+
+    res.json({ message: "Código de recuperação enviado para o email" });
+  } catch (err) {
+    console.error("Erro ao enviar email:", err);
+    res.status(500).json({ message: "Não foi possível enviar o email", error: err.message, code: err.code });
+  }
+});
+
+// -------------------- RESETAR SENHA --------------------
+router.post("/reset-password", async (req, res) => {
+  const { email, codigo, novaSenha } = req.body;
+
+  if (codigosRecuperacao[email] != codigo)
+    return res.status(400).json({ message: "Código inválido" });
+
+  const hash = await bcrypt.hash(novaSenha, 10);
+  await pool.query("UPDATE funcionarios SET senha = $1 WHERE email = $2", [hash, email]);
+
+  delete codigosRecuperacao[email];
+  res.json({ message: "Senha atualizada com sucesso" });
 });
 
 module.exports = router;

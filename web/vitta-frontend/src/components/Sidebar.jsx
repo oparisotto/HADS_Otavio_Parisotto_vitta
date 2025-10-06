@@ -1,13 +1,14 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { FaHome, FaUser, FaUsers, FaFileInvoiceDollar, FaSignOutAlt } from "react-icons/fa";
+import { useAuth } from "../context/AuthContext";
 
 export default function Sidebar() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("usuario");
-    navigate("/auth");
+    logout();
+    navigate("/auth/login");
   };
 
   const linkClasses = ({ isActive }) =>
