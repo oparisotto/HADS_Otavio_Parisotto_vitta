@@ -7,6 +7,7 @@ const pagamentosRoutes = require("./routes/pagamentos");
 const checkinsRoutes = require("./routes/checkins");
 const funcionariosRoutes = require("./routes/funcionarios");
 const relatoriosRoutes = require("./routes/relatorios");
+const authUsuariosRoutes = require("./routes/authUsuarios");
 require("dotenv").config();
 
 const app = express();
@@ -18,6 +19,7 @@ app.use("/pagamentos", pagamentosRoutes);
 app.use("/checkins", checkinsRoutes);
 app.use("/funcionarios", funcionariosRoutes);
 app.use("/relatorios", relatoriosRoutes);
+app.use("/auth-usuarios", authUsuariosRoutes);
 app.get("/", (req, res) =>{
     res.send("API Vitta rodando 🚀")
 });
