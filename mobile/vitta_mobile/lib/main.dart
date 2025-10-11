@@ -22,12 +22,32 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.grey[100],
       ),
       initialRoute: '/login',
-      routes: {
-        '/login': (_) => const LoginScreen(),
-        '/register': (_) => const RegisterScreen(),
-        '/forgot-password': (_) => const ForgotPasswordScreen(),
-        '/home': (_) => const HomeScreen(),
-        '/reset-password': (_) => const ResetPasswordScreen(email: ''),
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/login':
+            return MaterialPageRoute(builder: (_) => const LoginScreen());
+          case '/register':
+            return MaterialPageRoute(builder: (_) => const RegisterScreen());
+          case '/forgot-password':
+            return MaterialPageRoute(builder: (_) => const ForgotPasswordScreen());
+          case '/reset-password':
+            final args = settings.arguments as Map<String, dynamic>?;
+            return MaterialPageRoute(
+              builder: (_) => ResetPasswordScreen(email: args?['email'] ?? ''),
+            );
+          case '/home':
+            final args = settings.arguments as Map<String, dynamic>?;
+            // ⚡ Aqui usamos usuarioId ao invés de planoUsuario
+            return MaterialPageRoute(
+              builder: (_) => HomeScreen(
+                nomeUsuario: args?['nomeUsuario'] ?? 'Usuário',
+                usuarioId: args?['usuarioId'] ?? 0,// necessário para buscar plano
+
+              ),
+            );
+          default:
+            return null;
+        }
       },
     );
   }

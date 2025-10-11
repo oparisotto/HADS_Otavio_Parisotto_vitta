@@ -55,4 +55,28 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+// 🔹 Buscar último pagamento pago de um usuário
+router.get("/ultimo-pago/:usuario_id", async (req, res) => {
+  const { usuario_id } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT p.nome AS nome_plano
+       FROM pagamentos pg
+       JOIN planos p ON pg.plano_id = p.id
+       WHERE pg.usuario_id = $1 AND pg.status = 'pago'
+       ORDER BY pg.data_pagamento DESC
+       LIMIT 1`,
+      [usuario_id]
+    );
+
+    if (result.rows.length > 0) {
+      res.json(result.rows[0]); // { nome_plano: "Ouro" }
+    } else {
+      res.json(null); // sem plano ativo
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
