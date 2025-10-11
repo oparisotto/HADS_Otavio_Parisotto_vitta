@@ -33,33 +33,36 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-    // 1️⃣ Faz login
-    final res = await ApiService.login(email, senha);
+      // Faz login
+      final res = await ApiService.login(email, senha);
 
-    if (res['token'] != null && res['usuario'] != null) {
-      final usuario = res['usuario'];
-      final usuarioId = usuario['id'] ?? 0;
-      final nomeUsuario = usuario['nome'] ?? 'Usuário';
+      // VERIFICAÇÃO CORRIGIDA - Checa se foi bem sucedido
+      if (res['success'] == true || res['token'] != null) {
+        final usuario = res['usuario'] ?? {};
+        final usuarioId = usuario['id']?.toString() ?? '';
+        final nomeUsuario = usuario['nome'] ?? 'Usuário';
 
-      // 3️⃣ Navega direto para a HomeScreen já com o plano ativo
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => HomeScreen(
-            nomeUsuario: nomeUsuario,
-            usuarioId: usuarioId,
+        // Navega para a HomeScreen
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => HomeScreen(
+              nomeUsuario: nomeUsuario,
+              usuarioId: int.tryParse(usuarioId) ?? 0,
+            ),
           ),
-        ),
-      );
-    } else {
-      setState(() => message = res['message'] ?? 'Erro ao fazer login');
+        );
+      } else {
+        // Mostra mensagem de erro
+        setState(() => message = res['message'] ?? 'Erro ao fazer login');
+      }
+    } catch (e) {
+      setState(() => message = 'Erro ao conectar com o servidor: $e');
+      print('❌ Erro no login: $e');
+    } finally {
+      setState(() => loading = false);
     }
-  } catch (e) {
-    setState(() => message = 'Erro ao conectar com o servidor: $e');
-  } finally {
-    setState(() => loading = false);
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -147,7 +150,8 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 10),
 
               // Botão Login
-              Center(
+              SizedBox(
+                width: double.infinity,
                 child: ElevatedButton(
                   onPressed: loading ? null : login,
                   style: ElevatedButton.styleFrom(
@@ -155,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 14),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                   child: loading
                       ? const SizedBox(
@@ -163,7 +167,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 24,
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
-                      : const Text("Entrar", style: TextStyle(fontSize: 16, color: Colors.white)),
+                      : const Text(
+                          "Entrar", 
+                          style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)
+                        ),
                 ),
               ),
 
@@ -171,10 +178,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
               // Mensagem de erro
               if (message.isNotEmpty)
-                Center(
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red[200]!),
+                  ),
                   child: Text(
                     message,
-                    style: const TextStyle(color: Colors.red),
+                    style: TextStyle(color: Colors.red[700], fontSize: 14),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -195,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                     child: const Text(
                       "Cadastre-se",
-                      style: TextStyle(color: Colors.green),
+                      style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],

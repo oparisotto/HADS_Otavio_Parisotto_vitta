@@ -36,6 +36,46 @@ router.post("/", async (req, res) => {
   }
 });
 
+// Rota para buscar estatísticas de checkins do usuário
+router.get("/stats/:usuario_id", async (req, res) => {
+  const { usuario_id } = req.params;
+  
+  try {
+    // Checkins diários (hoje)
+    const diarios = await pool.query(
+      `SELECT COUNT(*) FROM checkins 
+       WHERE usuario_id = $1 
+       AND DATE(data_checkin) = CURRENT_DATE`,
+      [usuario_id]
+    );
+
+    // Checkins semanais (últimos 7 dias)
+    const semanais = await pool.query(
+      `SELECT COUNT(*) FROM checkins 
+       WHERE usuario_id = $1 
+       AND data_checkin >= CURRENT_DATE - INTERVAL '7 days'`,
+      [usuario_id]
+    );
+
+    // Checkins mensais (últimos 30 dias)
+    const mensais = await pool.query(
+      `SELECT COUNT(*) FROM checkins 
+       WHERE usuario_id = $1 
+       AND data_checkin >= CURRENT_DATE - INTERVAL '30 days'`,
+      [usuario_id]
+    );
+
+    res.json({
+      diarios: parseInt(diarios.rows[0].count),
+      semanais: parseInt(semanais.rows[0].count),
+      mensais: parseInt(mensais.rows[0].count),
+    });
+  } catch (err) {
+    console.error('Erro ao buscar estatísticas:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Rota GET: check-ins totais por dia com preenchimento de dias sem check-in
 router.get("/", async (req, res) => {
   const { inicio, fim } = req.query; // datas opcionais: YYYY-MM-DD
