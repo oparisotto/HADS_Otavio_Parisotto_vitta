@@ -16,20 +16,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? message;
 
   Future<void> register() async {
-    setState(() => loading = true);
-    final res = await ApiService.register(
-      nomeController.text.trim(),
-      emailController.text.trim(),
-      senhaController.text.trim(),
-    );
     setState(() {
-      loading = false;
-      message = res['message'];
+      loading = true;
+      message = null;
     });
 
-    if (message != null && message!.contains("sucesso")) {
-      // vai para seleção de planos (etapa seguinte)
-      Navigator.pushReplacementNamed(context, '/planos');
+    try {
+      final res = await ApiService.register(
+        nomeController.text.trim(),
+        emailController.text.trim(),
+        senhaController.text.trim(),
+      );
+      
+      setState(() {
+        loading = false;
+        message = res['message'];
+      });
+
+      // ✅ CORREÇÃO: Verifica success em vez de mensagem
+      if (res['success'] == true) {
+        print('✅ Registro bem-sucedido, navegando para seleção de plano...');
+        
+        // ✅ CORREÇÃO: Use pushNamed em vez de pushReplacementNamed para debug
+        Navigator.pushNamed(context, '/selecao-plano');
+        
+        // Ou use este para produção:
+        // Navigator.pushReplacementNamed(context, '/selecao-plano');
+      } else {
+        print('❌ Registro falhou: ${res['message']}');
+      }
+
+    } catch (e) {
+      setState(() {
+        loading = false;
+        message = 'Erro de conexão: $e';
+      });
+      print('❌ Erro no registro: $e');
     }
   }
 
@@ -63,6 +85,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: const InputDecoration(
                     labelText: "Nome",
                     border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -71,7 +94,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: const InputDecoration(
                     labelText: "Email",
                     border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.email),
                   ),
+                  keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -80,6 +105,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: const InputDecoration(
                     labelText: "Senha",
                     border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -90,7 +116,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       message!,
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: message!.contains("sucesso")
+                        color: message!.toLowerCase().contains("sucesso") || message!.toLowerCase().contains("success")
                             ? Colors.green
                             : Colors.red,
                       ),
@@ -105,7 +131,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   onPressed: loading ? null : register,
                   child: loading
-                      ? const CircularProgressIndicator(color: Colors.white)
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(color: Colors.white),
+                        )
                       : const Text(
                           "Cadastrar",
                           style: TextStyle(

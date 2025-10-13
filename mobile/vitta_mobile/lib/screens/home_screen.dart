@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // ✅ ADICIONAR IMPORT
 import 'checkin_screen.dart';
 import 'planos_screen.dart';
 
@@ -19,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   int currentIndex = 1;
   late final AnimationController animationController;
+  String _planoUsuario = 'Sem plano'; // ✅ ADICIONAR PARA ARMAZENAR O PLANO
 
   @override
   void initState() {
@@ -27,12 +29,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+    _carregarPlanoUsuario(); // ✅ CARREGAR PLANO DO USUÁRIO
   }
 
   @override
   void dispose() {
     animationController.dispose();
     super.dispose();
+  }
+
+  // ✅ MÉTODO PARA CARREGAR PLANO DO USUÁRIO
+  Future<void> _carregarPlanoUsuario() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final plano = prefs.getString('user_plano') ?? 'Sem plano';
+      setState(() {
+        _planoUsuario = plano;
+      });
+    } catch (e) {
+      print('❌ Erro ao carregar plano do usuário: $e');
+    }
   }
 
   void onTabTapped(int index) {
@@ -54,7 +70,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       _homeBody(nome, iniciais),
       PlanosScreen(
         nomeUsuario: widget.nomeUsuario,
-        planoUsuario: '', // Pode ajustar dentro da PlanosScreen
+        planoUsuario: _planoUsuario, // ✅ USAR PLANO CARREGADO
+        usuarioId: widget.usuarioId, // ✅ PASSAR ID DO USUÁRIO
       ),
     ];
 
@@ -97,18 +114,42 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ),
                   ),
                   const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        nome,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          nome,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Text(
+                          'Plano: $_planoUsuario', // ✅ MOSTRAR PLANO ATUAL
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'ID: ${widget.usuarioId}', // ✅ MOSTRAR ID DO USUÁRIO
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // ✅ BOTÃO PARA ATUALIZAR DADOS
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: Colors.white),
+                    onPressed: _atualizarDadosUsuario,
+                    tooltip: 'Atualizar dados',
                   ),
                 ],
               ),
@@ -191,6 +232,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
 
             const SizedBox(height: 20),
+
+            // ✅ BOTÃO PARA DEBUG - VER DADOS DO USUÁRIO
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              child: ElevatedButton(
+                onPressed: _verificarDadosUsuario,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[50],
+                  foregroundColor: Colors.blue,
+                ),
+                child: const Text('Ver Dados do Usuário (Debug)'),
+              ),
+            ),
           ],
         ),
       ),
@@ -273,6 +328,57 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             onTap: () => onTabTapped(2),
           ),
         ],
+      ),
+    );
+  }
+
+  // ✅ MÉTODO PARA VERIFICAR DADOS DO USUÁRIO (DEBUG)
+  void _verificarDadosUsuario() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    print('🔍 DADOS DO USUÁRIO NO SHARED_PREFERENCES:');
+    print('   ID: ${prefs.getString('user_id')}');
+    print('   Nome: ${prefs.getString('user_name')}');
+    print('   Email: ${prefs.getString('user_email')}');
+    print('   Plano: ${prefs.getString('user_plano')}');
+    print('   Status: ${prefs.getString('user_status')}');
+    print('   Token: ${prefs.getString('token')?.substring(0, 20)}...');
+
+    // Mostrar dialog com informações
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Dados do Usuário'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('ID: ${prefs.getString('user_id')}'),
+              Text('Nome: ${prefs.getString('user_name')}'),
+              Text('Email: ${prefs.getString('user_email')}'),
+              Text('Plano: ${prefs.getString('user_plano') ?? "Não definido"}'),
+              Text('Status: ${prefs.getString('user_status') ?? "Não definido"}'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fechar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ MÉTODO PARA ATUALIZAR DADOS
+  void _atualizarDadosUsuario() async {
+    await _carregarPlanoUsuario();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Dados atualizados!'),
+        duration: Duration(seconds: 2),
       ),
     );
   }

@@ -4,6 +4,9 @@ import 'screens/register_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/reset_password_screen.dart';
+import 'screens/planos_screen.dart';
+import 'screens/selecao_plano_screen.dart';
+import 'screens/pagamento_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -20,16 +23,18 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.green,
         scaffoldBackgroundColor: Colors.grey[100],
+        useMaterial3: true,
       ),
       initialRoute: '/login',
+      routes: {
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/forgot-password': (context) => const ForgotPasswordScreen(),
+        '/selecao-plano': (context) => const SelecaoPlanoScreen(),
+        '/pagamento': (context) => const PagamentoScreen(),
+      },
       onGenerateRoute: (settings) {
         switch (settings.name) {
-          case '/login':
-            return MaterialPageRoute(builder: (_) => const LoginScreen());
-          case '/register':
-            return MaterialPageRoute(builder: (_) => const RegisterScreen());
-          case '/forgot-password':
-            return MaterialPageRoute(builder: (_) => const ForgotPasswordScreen());
           case '/reset-password':
             final args = settings.arguments as Map<String, dynamic>?;
             return MaterialPageRoute(
@@ -37,16 +42,25 @@ class MyApp extends StatelessWidget {
             );
           case '/home':
             final args = settings.arguments as Map<String, dynamic>?;
-            // ⚡ Aqui usamos usuarioId ao invés de planoUsuario
             return MaterialPageRoute(
               builder: (_) => HomeScreen(
                 nomeUsuario: args?['nomeUsuario'] ?? 'Usuário',
-                usuarioId: args?['usuarioId'] ?? 0,// necessário para buscar plano
-
+                usuarioId: args?['usuarioId'] ?? 0,
+              ),
+            );
+          case '/planos':
+            final args = settings.arguments as Map<String, dynamic>?;
+            return MaterialPageRoute(
+              builder: (_) => PlanosScreen(
+                nomeUsuario: args?['nomeUsuario'] ?? 'Usuário',
+                planoUsuario: args?['planoUsuario'] ?? 'Sem plano',
+                usuarioId: args?['usuarioId'] ?? 0, // ✅ ADICIONAR usuarioId
               ),
             );
           default:
-            return null;
+            return MaterialPageRoute(
+              builder: (_) => const LoginScreen(),
+            );
         }
       },
     );

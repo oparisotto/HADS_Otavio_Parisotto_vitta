@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
 class CheckinScreen extends StatefulWidget {
@@ -23,6 +25,41 @@ class _CheckinScreenState extends State<CheckinScreen> {
   void initState() {
     super.initState();
     _loadInitialData();
+    
+    // 🔄 CONFIGURAR LISTENER PARA ATUALIZAÇÕES
+    _setupUpdateListener();
+  }
+
+  // 🔄 LISTENER PARA ATUALIZAÇÕES DO PLANO
+  void _setupUpdateListener() {
+    // Usar um timer para verificar atualizações periodicamente
+    Timer.periodic(Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _carregarPlanoAtualizado();
+      }
+    });
+  }
+
+  // 🔄 CARREGAR PLANO ATUALIZADO
+  Future<void> _carregarPlanoAtualizado() async {
+    try {
+      print('🔄 Verificando atualização do plano...');
+      final planoAtualizado = await ApiService.getUserPlano();
+      
+      if (planoAtualizado['nome_plano'] != _planoData['nome_plano']) {
+        print('✅ Plano atualizado detectado: ${planoAtualizado['nome_plano']}');
+        
+        setState(() {
+          _planoData = planoAtualizado;
+        });
+        
+        // 🔄 ATUALIZAR SHARED PREFERENCES TAMBÉM
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_plano', planoAtualizado['nome_plano'] ?? 'Sem plano');
+      }
+    } catch (e) {
+      print('❌ Erro ao verificar atualização do plano: $e');
+    }
   }
 
   Future<void> _loadInitialData() async {
@@ -52,6 +89,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
       setState(() {
         _planoData = planoData;
       });
+      print('📋 Plano carregado: ${planoData['nome_plano']}');
     } catch (e) {
       print('Erro ao carregar dados do plano: $e');
     }
@@ -66,6 +104,29 @@ class _CheckinScreenState extends State<CheckinScreen> {
     } catch (e) {
       print('Erro ao carregar estatísticas: $e');
     }
+  }
+
+  // 🔄 MÉTODO PARA RECARREGAR TODOS OS DADOS
+  Future<void> _recarregarTodosDados() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    await _loadUserData();
+    await _loadPlanoData();
+    await _loadCheckinStats();
+    
+    setState(() {
+      _isLoading = false;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Dados atualizados!'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _realizarCheckin() async {
@@ -125,6 +186,18 @@ class _CheckinScreenState extends State<CheckinScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        title: Text('Check-in'),
+        backgroundColor: Colors.green[700],
+        actions: [
+          // 🔄 BOTÃO PARA ATUALIZAR MANUALMENTE
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _isLoading ? null : _recarregarTodosDados,
+            tooltip: 'Atualizar dados',
+          ),
+        ],
+      ),
       body: _isLoading
           ? Center(
               child: Column(
@@ -214,13 +287,21 @@ class _CheckinScreenState extends State<CheckinScreen> {
                                   color: Colors.white.withOpacity(0.2),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Text(
-                                  _planoData['nome_plano'] ?? 'Sem plano',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _planoData['nome_plano'] ?? 'Sem plano',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    // 🔄 INDICADOR DE PLANO ATIVO
+                                    if (_planoData['nome_plano'] != 'Sem plano')
+                                      Icon(Icons.check_circle, size: 12, color: Colors.white),
+                                  ],
                                 ),
                               ),
                             ],
@@ -277,30 +358,26 @@ class _CheckinScreenState extends State<CheckinScreen> {
                 
                 const SizedBox(height: 30),
                 
-                // Informação adicional
+                // 🔄 INDICADOR DE ATUALIZAÇÃO AUTOMÁTICA
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.green[50],
+                      color: Colors.blue[50],
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green[100]!),
+                      border: Border.all(color: Colors.blue[100]!),
                     ),
                     child: Row(
                       children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: Colors.green[700],
-                          size: 20,
-                        ),
-                        const SizedBox(width: 10),
+                        Icon(Icons.sync, size: 16, color: Colors.blue[700]),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'O check-in só será permitido se seu pagamento estiver em dia',
+                            'Dados atualizados automaticamente',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.green[800],
+                              color: Colors.blue[800],
                             ),
                           ),
                         ),

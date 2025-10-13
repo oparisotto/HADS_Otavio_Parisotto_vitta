@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:vitta_mobile/screens/home_screen.dart';
-import 'package:vitta_mobile/screens/register_screen.dart';
-import 'package:vitta_mobile/screens/forgot_password_screen.dart';
 import 'package:vitta_mobile/services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -42,15 +39,14 @@ class _LoginScreenState extends State<LoginScreen> {
         final usuarioId = usuario['id']?.toString() ?? '';
         final nomeUsuario = usuario['nome'] ?? 'Usuário';
 
-        // Navega para a HomeScreen
-        Navigator.pushReplacement(
+        // ✅ CORREÇÃO: Navega para Home usando rotas nomeadas
+        Navigator.pushReplacementNamed(
           context,
-          MaterialPageRoute(
-            builder: (_) => HomeScreen(
-              nomeUsuario: nomeUsuario,
-              usuarioId: int.tryParse(usuarioId) ?? 0,
-            ),
-          ),
+          '/home',
+          arguments: {
+            'nomeUsuario': nomeUsuario,
+            'usuarioId': int.tryParse(usuarioId) ?? 0,
+          },
         );
       } else {
         // Mostra mensagem de erro
@@ -135,10 +131,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
-                    );
+                    // ✅ CORREÇÃO: Usar rotas nomeadas
+                    Navigator.pushNamed(context, '/forgot-password');
                   },
                   child: const Text(
                     "Esqueci minha senha",
@@ -202,10 +196,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Text("Não tem conta? "),
                   TextButton(
                     onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                      );
+                      // ✅ CORREÇÃO: Usar rotas nomeadas
+                      Navigator.pushNamed(context, '/register');
                     },
                     child: const Text(
                       "Cadastre-se",
