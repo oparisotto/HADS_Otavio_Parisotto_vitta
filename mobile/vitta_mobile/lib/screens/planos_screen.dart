@@ -1,22 +1,20 @@
 import 'package:flutter/material.dart';
 import '../models/plano.dart';
 import '../services/api_service.dart';
-import 'checkin_screen.dart';
-import 'home_screen.dart';
 import 'pagamento_screen.dart';
 
 class PlanosScreen extends StatefulWidget {
   final String nomeUsuario;
-  final String planoUsuario;
   final int usuarioId;
-  final String? statusPlano; // ✅ ADICIONAR STATUS DO PLANO
+  final String token;
+  final VoidCallback? onPlanoAtualizado;
 
   const PlanosScreen({
     super.key,
     required this.nomeUsuario,
-    required this.planoUsuario,
     required this.usuarioId,
-    this.statusPlano, // ✅ STATUS DO PLANO (pago, pendente, cancelado, etc)
+    required this.token,
+    this.onPlanoAtualizado,
   });
 
   @override
@@ -27,30 +25,38 @@ class _PlanosScreenState extends State<PlanosScreen> {
   late Future<List<Plano>> _planosFuture;
   bool _loading = true;
   String _errorMessage = '';
-  String _statusPlanoAtual = 'ativo'; // ✅ STATUS DO PLANO ATUAL
+  String _statusPlanoAtual = 'carregando...';
+  String _planoAtualNome = 'Carregando...';
+  int? _planoAtualId;
 
   @override
   void initState() {
     super.initState();
+    _carregarDadosUsuario();
     _carregarPlanos();
-    _carregarStatusPlano(); // ✅ CARREGAR STATUS DO PLANO
   }
 
-  // ✅ ADICIONAR MÉTODO PARA CARREGAR STATUS DO PLANO
-  Future<void> _carregarStatusPlano() async {
+  // ✅ CORREÇÃO: Carregar dados atualizados do usuário
+  Future<void> _carregarDadosUsuario() async {
     try {
-      final resultado = await ApiService.verificarStatusPlano(widget.usuarioId);
-      if (resultado['success'] == true) {
+      final planoData = await ApiService.getPlanoUsuario(widget.usuarioId.toString());
+      
+      if (planoData['success'] == true) {
         setState(() {
-          _statusPlanoAtual = resultado['status_plano'];
+          _planoAtualNome = planoData['nome_plano'] ?? 'Sem plano';
+          _statusPlanoAtual = planoData['status_plano'] ?? 'inativo';
+          _planoAtualId = planoData['plano_atual_id']; // ✅ Capturar o ID do plano atual
         });
-        print('📊 Status do plano carregado: $_statusPlanoAtual');
+        print('✅ Dados do plano carregados: $_planoAtualNome - $_statusPlanoAtual - ID: $_planoAtualId');
+      } else {
+        throw Exception('Erro ao carregar dados do plano');
       }
     } catch (e) {
-      print('❌ Erro ao carregar status do plano: $e');
-      // Em caso de erro, assumir ativo
+      print('❌ Erro ao carregar dados do usuário: $e');
       setState(() {
-        _statusPlanoAtual = 'ativo';
+        _planoAtualNome = 'Sem plano';
+        _statusPlanoAtual = 'inativo';
+        _planoAtualId = null;
       });
     }
   }
@@ -84,16 +90,15 @@ class _PlanosScreenState extends State<PlanosScreen> {
         _loading = true;
       });
 
-      // Chamar API para cancelar plano
       final resultado = await ApiService.cancelarPlanoUsuario(widget.usuarioId);
 
       if (resultado['success'] == true) {
-        // Atualizar status localmente
         setState(() {
           _statusPlanoAtual = 'cancelado';
         });
 
-        // Mostrar mensagem de sucesso
+        widget.onPlanoAtualizado?.call();
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -104,8 +109,7 @@ class _PlanosScreenState extends State<PlanosScreen> {
           ),
         );
 
-        // Recarregar dados
-        _carregarPlanos();
+        await _carregarDadosUsuario();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -137,14 +141,14 @@ class _PlanosScreenState extends State<PlanosScreen> {
         _loading = true;
       });
 
-      // Chamar API para reativar plano
       final resultado = await ApiService.reativarPlanoUsuario(widget.usuarioId);
 
       if (resultado['success'] == true) {
-        // Atualizar status localmente
         setState(() {
           _statusPlanoAtual = 'ativo';
         });
+
+        widget.onPlanoAtualizado?.call();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -156,8 +160,7 @@ class _PlanosScreenState extends State<PlanosScreen> {
           ),
         );
 
-        // Recarregar dados
-        _carregarPlanos();
+        await _carregarDadosUsuario();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -203,7 +206,7 @@ class _PlanosScreenState extends State<PlanosScreen> {
               _cancelarPlano();
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Cancelar Plano'),
+            child: const Text('Cancelar Plano', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -231,7 +234,7 @@ class _PlanosScreenState extends State<PlanosScreen> {
               _reativarPlano();
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('Reativar Plano'),
+            child: const Text('Reativar Plano', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -239,9 +242,20 @@ class _PlanosScreenState extends State<PlanosScreen> {
   }
 
   Widget _buildPlanoCard(Plano plano) {
-    final bool isPlanoAtual =
-        plano.nome.toLowerCase() == widget.planoUsuario.toLowerCase();
+    // ✅ CORREÇÃO: Lógica simplificada para identificar plano atual
+    // Se o usuário tem um plano ativo E o nome do plano atual é igual ao plano do card
+    final bool isPlanoAtual = _planoAtualNome.toLowerCase() == plano.nome.toLowerCase() && 
+                              _statusPlanoAtual != 'inativo' && 
+                              _planoAtualNome != 'Sem plano';
+    
     final bool planoCancelado = _statusPlanoAtual == 'cancelado';
+    final bool planoAtivo = _statusPlanoAtual == 'ativo';
+    final bool semPlano = _planoAtualNome == 'Sem plano';
+
+    print('🔍 Verificando plano: ${plano.nome}');
+    print('   Plano atual: $_planoAtualNome');
+    print('   Status: $_statusPlanoAtual');
+    print('   É plano atual: $isPlanoAtual');
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -304,11 +318,13 @@ class _PlanosScreenState extends State<PlanosScreen> {
                     color: Color(0xFF2E7D32),
                   ),
                 ),
+                
+                // ✅ CORREÇÃO: Lógica simplificada para mostrar botões
                 if (isPlanoAtual)
-                  // ✅ BOTÃO PARA CANCELAR/REATIVAR PLANO ATUAL
+                  // Se é o plano atual, mostra botão de cancelar/reativar
                   _buildBotaoStatusPlano()
-                else if (!planoCancelado)
-                  // ✅ BOTÃO PARA ASSINAR OUTRO PLANO (apenas se não estiver cancelado)
+                else if (!planoCancelado && (planoAtivo || semPlano || _statusPlanoAtual == 'inativo'))
+                  // Se NÃO é plano atual E NÃO está cancelado, mostra botão assinar
                   ElevatedButton(
                     onPressed: () {
                       _irParaPagamento(plano);
@@ -322,7 +338,7 @@ class _PlanosScreenState extends State<PlanosScreen> {
                     ),
                     child: const Text(
                       'Assinar',
-                      style: TextStyle(fontSize: 12),
+                      style: TextStyle(fontSize: 12, color: Colors.white),
                     ),
                   ),
               ],
@@ -338,24 +354,22 @@ class _PlanosScreenState extends State<PlanosScreen> {
     final bool planoCancelado = _statusPlanoAtual == 'cancelado';
 
     if (planoCancelado) {
-      // BOTÃO PARA REATIVAR PLANO CANCELADO
       return ElevatedButton(
         onPressed: _mostrarDialogoReativacao,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.green,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
-        child: const Text('Reativar Plano', style: TextStyle(fontSize: 12)),
+        child: const Text('Reativar Plano', style: TextStyle(fontSize: 12, color: Colors.white)),
       );
     } else {
-      // BOTÃO PARA CANCELAR PLANO ATIVO
       return ElevatedButton(
         onPressed: _mostrarDialogoCancelamento,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.red,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
-        child: const Text('Cancelar Plano', style: TextStyle(fontSize: 12)),
+        child: const Text('Cancelar Plano', style: TextStyle(fontSize: 12, color: Colors.white)),
       );
     }
   }
@@ -365,10 +379,9 @@ class _PlanosScreenState extends State<PlanosScreen> {
     final bool planoCancelado = _statusPlanoAtual == 'cancelado';
 
     if (planoCancelado) {
-      // ❌ IMPEDIR ASSINATURA SE PLANO ESTIVER CANCELADO
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
+        const SnackBar(
+          content: Text(
             'Reative seu plano atual antes de assinar um novo',
           ),
           backgroundColor: Colors.orange,
@@ -397,37 +410,46 @@ class _PlanosScreenState extends State<PlanosScreen> {
             },
             'usuarioId': widget.usuarioId,
             'nomeUsuario': widget.nomeUsuario,
+            'token': widget.token,
           },
         ),
       ),
-    );
+    ).then((_) {
+      _carregarDadosUsuario();
+      widget.onPlanoAtualizado?.call();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final iniciais = widget.nomeUsuario.isNotEmpty
         ? widget.nomeUsuario
-              .trim()
-              .split(' ')
-              .map((e) => e.isNotEmpty ? e[0] : '')
-              .where((element) => element.isNotEmpty)
-              .take(2)
-              .join()
-              .toUpperCase()
+            .trim()
+            .split(' ')
+            .map((e) => e.isNotEmpty ? e[0] : '')
+            .where((element) => element.isNotEmpty)
+            .take(2)
+            .join()
+            .toUpperCase()
         : 'U';
 
     final bool planoCancelado = _statusPlanoAtual == 'cancelado';
+    final bool carregandoDados = _statusPlanoAtual == 'carregando...';
 
     return Scaffold(
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
         title: const Text('Planos Disponíveis'),
         backgroundColor: const Color(0xFF2E7D32),
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _carregarPlanos,
+            onPressed: () {
+              _carregarDadosUsuario();
+              _carregarPlanos();
+            },
           ),
         ],
       ),
@@ -474,34 +496,44 @@ class _PlanosScreenState extends State<PlanosScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          widget.planoUsuario,
+                          _planoAtualNome,
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 14,
                           ),
                         ),
                         // ✅ STATUS DO PLANO
-                        Container(
-                          margin: const EdgeInsets.only(top: 4),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: planoCancelado
-                                ? Colors.red[900]
-                                : Colors.green[900],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            planoCancelado ? 'PLANO CANCELADO' : 'PLANO ATIVO',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                        if (!carregandoDados)
+                          Container(
+                            margin: const EdgeInsets.only(top: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: planoCancelado
+                                  ? Colors.red[900]!
+                                  : Colors.green[900]!,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              _statusPlanoAtual.toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        else
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white70,
                             ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -544,80 +576,83 @@ class _PlanosScreenState extends State<PlanosScreen> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _errorMessage.isNotEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _errorMessage,
-                            style: const TextStyle(color: Colors.red),
-                            textAlign: TextAlign.center,
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _errorMessage,
+                                style: const TextStyle(color: Colors.red),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: () {
+                                  _carregarDadosUsuario();
+                                  _carregarPlanos();
+                                },
+                                child: const Text('Tentar Novamente'),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: _carregarPlanos,
-                            child: const Text('Tentar Novamente'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : FutureBuilder<List<Plano>>(
-                      future: _planosFuture,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        } else if (snapshot.hasError) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.error,
-                                  color: Colors.red,
-                                  size: 50,
+                        )
+                      : FutureBuilder<List<Plano>>(
+                          future: _planosFuture,
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            } else if (snapshot.hasError) {
+                              return Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.error,
+                                      color: Colors.red,
+                                      size: 50,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Erro: ${snapshot.error}',
+                                      style: const TextStyle(color: Colors.red),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton(
+                                      onPressed: _carregarPlanos,
+                                      child: const Text('Tentar Novamente'),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Erro: ${snapshot.error}',
-                                  style: const TextStyle(color: Colors.red),
-                                  textAlign: TextAlign.center,
+                              );
+                            } else if (!snapshot.hasData ||
+                                snapshot.data!.isEmpty) {
+                              return const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.info, color: Colors.blue, size: 50),
+                                    SizedBox(height: 16),
+                                    Text('Nenhum plano disponível no momento'),
+                                  ],
                                 ),
-                                const SizedBox(height: 16),
-                                ElevatedButton(
-                                  onPressed: _carregarPlanos,
-                                  child: const Text('Tentar Novamente'),
-                                ),
-                              ],
-                            ),
-                          );
-                        } else if (!snapshot.hasData ||
-                            snapshot.data!.isEmpty) {
-                          return const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.info, color: Colors.blue, size: 50),
-                                SizedBox(height: 16),
-                                Text('Nenhum plano disponível no momento'),
-                              ],
-                            ),
-                          );
-                        }
+                              );
+                            }
 
-                        final planos = snapshot.data!;
-                        return ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          itemCount: planos.length,
-                          itemBuilder: (context, index) {
-                            final plano = planos[index];
-                            return _buildPlanoCard(plano);
+                            final planos = snapshot.data!;
+                            return ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              itemCount: planos.length,
+                              itemBuilder: (context, index) {
+                                final plano = planos[index];
+                                return _buildPlanoCard(plano);
+                              },
+                            );
                           },
-                        );
-                      },
-                    ),
+                        ),
             ),
           ],
         ),

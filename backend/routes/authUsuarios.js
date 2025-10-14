@@ -7,7 +7,7 @@ const pool = require("../db");
 
 const SECRET = process.env.JWT_SECRET;
 
-// -------------------- LISTAR USUÁRIOS (ADICIONAR ESTA ROTA) --------------------
+// -------------------- LISTAR USUÁRIOS (COM FILTRO CORRETO) --------------------
 router.get("/", async (req, res) => {
     try {
         console.log("📋 Buscando todos os usuários...");
@@ -22,35 +22,27 @@ router.get("/", async (req, res) => {
                 u.status_plano,
                 u.data_atualizacao_plano,
                 u.created_at,
-                -- ✅ PLANO ATUAL (o que está vinculado ao usuário)
                 p_atual.nome as plano_nome,
-                -- ✅ ÚLTIMO PAGAMENTO
+                p_atual.descricao as plano_descricao,
                 (SELECT status FROM pagamentos 
                  WHERE usuario_id = u.id 
                  ORDER BY data_pagamento DESC 
                  LIMIT 1) as status_pagamento,
-                -- ✅ PLANO DO ÚLTIMO PAGAMENTO
                 (SELECT pl.nome FROM pagamentos pa
                  JOIN planos pl ON pa.plano_id = pl.id
                  WHERE pa.usuario_id = u.id 
                  ORDER BY pa.data_pagamento DESC 
-                 LIMIT 1) as plano_ultimo_pagamento
+                 LIMIT 1) as plano_ultimo_pagamento,
+                (SELECT data_pagamento FROM pagamentos 
+                 WHERE usuario_id = u.id 
+                 ORDER BY data_pagamento DESC 
+                 LIMIT 1) as data_ultimo_pagamento
             FROM usuarios u
-            -- ✅ CORREÇÃO: LEFT JOIN para pegar o plano ATUAL do usuário
             LEFT JOIN planos p_atual ON u.plano_atual_id = p_atual.id
             ORDER BY u.created_at DESC
         `);
         
         console.log(`✅ ${result.rows.length} usuários encontrados`);
-        
-        // ✅ DEBUG DETALHADO
-        result.rows.forEach(usuario => {
-            console.log(`👤 ${usuario.nome} | ` +
-                       `Plano ID: ${usuario.plano_atual_id} | ` +
-                       `Plano Nome: "${usuario.plano_nome}" | ` +
-                       `Status Pagamento: ${usuario.status_pagamento} | ` +
-                       `Plano Último Pagamento: ${usuario.plano_ultimo_pagamento}`);
-        });
         
         res.json(result.rows);
     } catch (err) {
@@ -69,7 +61,6 @@ router.post("/corrigir-status", async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      // 1. Usuários com plano_atual_id mas status_plano = 'cancelado' - devem ser reativados
       const resultReativados = await client.query(
         `UPDATE usuarios 
          SET status_plano = 'ativo' 
@@ -80,7 +71,6 @@ router.post("/corrigir-status", async (req, res) => {
 
       console.log(`✅ ${resultReativados.rows.length} usuários reativados automaticamente`);
 
-      // 2. Usuários sem plano_atual_id mas com status_plano = 'ativo' - devem ser ajustados
       const resultAjustados = await client.query(
         `UPDATE usuarios 
          SET status_plano = 'inativo' 
@@ -119,23 +109,35 @@ router.post("/corrigir-status", async (req, res) => {
   }
 });
 
-// -------------------- LOGIN (Usuário) - REMOVER DUPLICATA --------------------
-// ⚠️ REMOVER A SEGUNDA ROTA LOGIN QUE ESTÁ MAIS ABAIXO NO CÓDIGO
+// -------------------- LOGIN (CORRIGIDO) --------------------
 router.post("/login", async (req, res) => {
   const { email, senha } = req.body;
+  
   try {
+    console.log('🔐 Tentativa de login para:', email);
+    
     const result = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
-    if (result.rows.length === 0)
+    if (result.rows.length === 0) {
+      console.log('❌ Usuário não encontrado:', email);
       return res.status(404).json({ message: "Usuário não encontrado" });
+    }
 
     const usuario = result.rows[0];
+    console.log('✅ Usuário encontrado:', { 
+      id: usuario.id, 
+      nome: usuario.nome, 
+      email: usuario.email 
+    });
 
     if (!usuario.senha) {
       return res.status(500).json({ message: "Usuário sem senha válida" });
     }
 
     const senhaValida = await bcrypt.compare(senha, usuario.senha);
-    if (!senhaValida) return res.status(401).json({ message: "Senha incorreta" });
+    if (!senhaValida) {
+      console.log('❌ Senha incorreta para:', email);
+      return res.status(401).json({ message: "Senha incorreta" });
+    }
 
     if (!SECRET) {
       console.error("JWT_SECRET não definido no .env");
@@ -144,6 +146,9 @@ router.post("/login", async (req, res) => {
 
     const token = jwt.sign({ id: usuario.id, email: usuario.email }, SECRET, { expiresIn: "8h" });
 
+    console.log('✅ Login bem-sucedido para:', usuario.nome);
+    
+    // ✅ CORREÇÃO: Retornar dados COMPLETOS do usuário
     res.json({
       message: "Login realizado com sucesso",
       token,
@@ -151,12 +156,121 @@ router.post("/login", async (req, res) => {
         id: usuario.id,
         nome: usuario.nome,
         email: usuario.email,
-        status: usuario.status
+        status: usuario.status,
+        plano_atual_id: usuario.plano_atual_id,
+        status_plano: usuario.status_plano
       },
     });
   } catch (err) {
-    console.error("Erro no login:", err);
+    console.error("❌ Erro no login:", err);
     res.status(500).json({ message: "Erro interno no servidor", error: err.message });
+  }
+});
+
+// -------------------- BUSCAR PLANO DO USUÁRIO ESPECÍFICO --------------------
+router.get("/:id/plano", async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log(`🔍 Buscando plano do usuário ID: ${id}`);
+
+    const result = await pool.query(`
+      SELECT 
+        u.id,
+        u.nome,
+        u.email,
+        u.plano_atual_id,
+        u.status_plano,
+        p.nome as nome_plano,
+        p.descricao as descricao_plano,
+        p.preco as preco_plano,
+        (SELECT status FROM pagamentos 
+         WHERE usuario_id = u.id AND status = 'pago'
+         ORDER BY data_pagamento DESC 
+         LIMIT 1) as status_pagamento
+      FROM usuarios u
+      LEFT JOIN planos p ON u.plano_atual_id = p.id
+      WHERE u.id = $1
+    `, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuário não encontrado"
+      });
+    }
+
+    const usuario = result.rows[0];
+    
+    console.log(`✅ Plano encontrado para ${usuario.nome}:`, {
+      plano_id: usuario.plano_atual_id,
+      plano_nome: usuario.nome_plano,
+      status_plano: usuario.status_plano,
+      status_pagamento: usuario.status_pagamento
+    });
+
+    res.json({
+      success: true,
+      nome_plano: usuario.nome_plano || 'Sem plano',
+      descricao_plano: usuario.descricao_plano || '',
+      preco_plano: usuario.preco_plano || 0,
+      status_plano: usuario.status_plano || 'inativo',
+      status_pagamento: usuario.status_pagamento || 'pendente'
+    });
+
+  } catch (err) {
+    console.error("❌ Erro ao buscar plano do usuário:", err);
+    res.status(500).json({
+      success: false,
+      message: "Erro interno ao buscar plano",
+      error: err.message
+    });
+  }
+});
+
+// -------------------- BUSCAR USUÁRIO ESPECÍFICO --------------------
+router.get("/usuario/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`🔍 Buscando usuário específico ID: ${id}`);
+    
+    const result = await pool.query(`
+      SELECT 
+        u.id,
+        u.nome,
+        u.email,
+        u.status as usuario_status,
+        u.plano_atual_id,
+        u.status_plano,
+        u.data_atualizacao_plano,
+        u.created_at,
+        p_atual.nome as plano_nome,
+        p_atual.descricao as plano_descricao,
+        (SELECT status FROM pagamentos 
+         WHERE usuario_id = u.id 
+         ORDER BY data_pagamento DESC 
+         LIMIT 1) as status_pagamento,
+        (SELECT pl.nome FROM pagamentos pa
+         JOIN planos pl ON pa.plano_id = pl.id
+         WHERE pa.usuario_id = u.id 
+         ORDER BY pa.data_pagamento DESC 
+         LIMIT 1) as plano_ultimo_pagamento
+      FROM usuarios u
+      LEFT JOIN planos p_atual ON u.plano_atual_id = p_atual.id
+      WHERE u.id = $1
+    `, [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Usuário não encontrado" });
+    }
+    
+    const usuario = result.rows[0];
+    console.log(`✅ Usuário encontrado:`, usuario);
+    
+    res.json(usuario);
+  } catch (err) {
+    console.error("❌ Erro ao buscar usuário:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -167,7 +281,6 @@ router.post("/register", async (req, res) => {
 
     console.log("📝 Tentando registrar usuário:", { nome, email });
 
-    // Verificar se usuário já existe
     const userExists = await pool.query(
       "SELECT * FROM usuarios WHERE email = $1", 
       [email]
@@ -180,11 +293,9 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // Hash da senha
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(senha, saltRounds);
 
-    // Criar usuário com status 'pending'
     const result = await pool.query(
       `INSERT INTO usuarios (nome, email, senha, status) 
        VALUES ($1, $2, $3, 'pending') 
@@ -194,7 +305,6 @@ router.post("/register", async (req, res) => {
 
     const usuario = result.rows[0];
     
-    // Gerar token
     const token = jwt.sign(
       { userId: usuario.id, email: usuario.email },
       process.env.JWT_SECRET || "fallback_secret",
@@ -307,7 +417,6 @@ router.put("/:id/cancelar-plano", async (req, res) => {
     
     console.log("❌ Cancelando plano do usuário:", id);
 
-    // Primeiro verificar se o usuário existe
     const usuarioExiste = await pool.query(
       "SELECT id, nome, plano_atual_id FROM usuarios WHERE id = $1",
       [id]
@@ -322,7 +431,6 @@ router.put("/:id/cancelar-plano", async (req, res) => {
 
     const usuario = usuarioExiste.rows[0];
 
-    // Se não tem plano atual, não pode cancelar
     if (!usuario.plano_atual_id) {
       return res.status(400).json({
         success: false,
@@ -330,13 +438,11 @@ router.put("/:id/cancelar-plano", async (req, res) => {
       });
     }
 
-    // Iniciar transaction
     const client = await pool.connect();
     
     try {
       await client.query('BEGIN');
 
-      // 1. Atualizar status do usuário
       const resultUsuario = await client.query(
         `UPDATE usuarios 
          SET status_plano = 'cancelado', data_atualizacao_plano = $1 
@@ -345,7 +451,6 @@ router.put("/:id/cancelar-plano", async (req, res) => {
         [new Date(), id]
       );
 
-      // 2. Marcar pagamentos ativos como cancelados
       await client.query(
         `UPDATE pagamentos 
          SET status = 'cancelado' 
@@ -381,7 +486,7 @@ router.put("/:id/cancelar-plano", async (req, res) => {
   }
 });
 
-// ✅ CORRIGIR A ROTA REATIVAR-PLANO - routes/usuarios.js
+// ---------- REATIVAR PLANO ----------
 router.put("/:id/reativar-plano", async (req, res) => {
   try {
     const { id } = req.params;
@@ -414,7 +519,6 @@ router.put("/:id/reativar-plano", async (req, res) => {
     try {
       await client.query('BEGIN');
 
-      // 1. Atualizar status do usuário para 'ativo'
       const resultUsuario = await client.query(
         `UPDATE usuarios 
          SET status_plano = 'ativo', data_atualizacao_plano = $1 
@@ -423,7 +527,6 @@ router.put("/:id/reativar-plano", async (req, res) => {
         [new Date(), id]
       );
 
-      // 2. ✅ CORREÇÃO: Buscar o ID do último pagamento primeiro
       const ultimoPagamento = await client.query(
         `SELECT id FROM pagamentos 
          WHERE usuario_id = $1 
@@ -435,7 +538,6 @@ router.put("/:id/reativar-plano", async (req, res) => {
       if (ultimoPagamento.rows.length > 0) {
         const pagamentoId = ultimoPagamento.rows[0].id;
         
-        // 3. Reativar o pagamento
         await client.query(
           `UPDATE pagamentos SET status = 'pago' WHERE id = $1`,
           [pagamentoId]
@@ -521,8 +623,8 @@ router.get("/:id/status-plano", async (req, res) => {
   }
 });
 
-// -------------------- RECUPERAR SENHA (Usuário) --------------------
-let codigosRecuperacao = {}; // Armazena códigos temporariamente
+// -------------------- RECUPERAR SENHA --------------------
+let codigosRecuperacao = {};
 
 router.post("/forgot-password", async (req, res) => {
   const { email } = req.body;
@@ -536,7 +638,6 @@ router.post("/forgot-password", async (req, res) => {
     const codigo = Math.floor(100000 + Math.random() * 900000);
     codigosRecuperacao[email] = codigo;
 
-    // Transporter SMTP (mesmo usado no web)
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: process.env.SMTP_PORT,
@@ -561,7 +662,7 @@ router.post("/forgot-password", async (req, res) => {
   }
 });
 
-// -------------------- RESETAR SENHA (Usuário) --------------------
+// -------------------- RESETAR SENHA --------------------
 router.post("/reset-password", async (req, res) => {
   const { email, codigo, novaSenha } = req.body;
 

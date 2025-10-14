@@ -274,18 +274,6 @@ const corStatus = (status) => {
           </table>
         </div>
       </div>
-
-      {/* INFO RÁPIDA */}
-      <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-        <div className="flex justify-between items-center">
-          <span className="text-blue-700 font-medium">
-            📊 {alunos.length} alunos | {alunosFiltrados.length} filtrados
-          </span>
-          <span className="text-blue-600 text-sm">
-            Atualizado: {new Date().toLocaleTimeString()}
-          </span>
-        </div>
-      </div>
     </div>
   );
 }

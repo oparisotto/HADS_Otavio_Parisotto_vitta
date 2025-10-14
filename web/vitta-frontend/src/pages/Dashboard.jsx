@@ -250,41 +250,6 @@ export default function RelatoriosDashboard() {
         📈 Relatórios Gerais — Academia Vitta
       </h1>
 
-      {/* Informações de debug */}
-      <div className="mb-4 p-3 bg-gray-100 rounded text-sm">
-        <div className="flex justify-between items-center">
-          <span className="text-gray-700 font-mono text-xs">{debugInfo}</span>
-          <div className="flex gap-2">
-            <button
-              onClick={verificarDataSistema}
-              className="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 text-xs"
-              title="Ver data do sistema"
-            >
-              📅 Data
-            </button>
-            <button
-              onClick={testarConexao}
-              className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-xs"
-            >
-              Testar Conexão
-            </button>
-            <button
-              onClick={verificarDadosBanco}
-              className="bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600 text-xs"
-            >
-              Ver Banco
-            </button>
-            <button
-              onClick={recarregarDados}
-              className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 text-xs"
-              disabled={carregando}
-            >
-              {carregando ? "⏳" : "🔄"}
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Mensagem de erro */}
       {erro && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">

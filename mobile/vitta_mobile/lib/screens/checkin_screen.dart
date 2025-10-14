@@ -4,7 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
 class CheckinScreen extends StatefulWidget {
-  const CheckinScreen({Key? key}) : super(key: key);
+  final int usuarioId;
+
+  const CheckinScreen({Key? key, required this.usuarioId}) : super(key: key);
 
   @override
   State<CheckinScreen> createState() => _CheckinScreenState();
@@ -12,7 +14,7 @@ class CheckinScreen extends StatefulWidget {
 
 class _CheckinScreenState extends State<CheckinScreen> {
   Map<String, dynamic> _userData = {};
-  Map<String, dynamic> _planoData = {'nome_plano': 'Sem plano'};
+  Map<String, dynamic> _planoData = {'nome_plano': 'Carregando...', 'status_plano': 'carregando'};
   Map<String, int> _checkinStats = {
     'diarios': 0,
     'semanais': 0,
@@ -20,42 +22,51 @@ class _CheckinScreenState extends State<CheckinScreen> {
   };
   bool _isLoading = true;
   bool _isMakingCheckin = false;
+  Timer? _updateTimer;
+  bool _planoAtivo = false;
 
   @override
   void initState() {
     super.initState();
     _loadInitialData();
-    
-    // 🔄 CONFIGURAR LISTENER PARA ATUALIZAÇÕES
     _setupUpdateListener();
   }
 
-  // 🔄 LISTENER PARA ATUALIZAÇÕES DO PLANO
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    super.dispose();
+  }
+
   void _setupUpdateListener() {
-    // Usar um timer para verificar atualizações periodicamente
-    Timer.periodic(Duration(seconds: 30), (timer) {
+    _updateTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (mounted) {
         _carregarPlanoAtualizado();
       }
     });
   }
 
-  // 🔄 CARREGAR PLANO ATUALIZADO
   Future<void> _carregarPlanoAtualizado() async {
     try {
-      print('🔄 Verificando atualização do plano...');
-      final planoAtualizado = await ApiService.getUserPlano();
+      final planoAtualizado = await ApiService.getPlanoUsuario(widget.usuarioId.toString());
       
-      if (planoAtualizado['nome_plano'] != _planoData['nome_plano']) {
-        print('✅ Plano atualizado detectado: ${planoAtualizado['nome_plano']}');
+      if (planoAtualizado['success'] == true) {
+        final novoNomePlano = planoAtualizado['nome_plano'] ?? 'Sem plano';
+        final novoStatusPlano = planoAtualizado['status_plano'] ?? 'inativo';
         
-        setState(() {
-          _planoData = planoAtualizado;
-        });
-        
-        // 🔄 ATUALIZAR SHARED PREFERENCES TAMBÉM
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_plano', planoAtualizado['nome_plano'] ?? 'Sem plano');
+        if (novoNomePlano != _planoData['nome_plano'] || novoStatusPlano != _planoData['status_plano']) {
+          setState(() {
+            _planoData = {
+              'nome_plano': novoNomePlano,
+              'status_plano': novoStatusPlano
+            };
+            _planoAtivo = novoStatusPlano == 'ativo';
+          });
+          
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_plano', novoNomePlano);
+          await prefs.setString('user_status_plano', novoStatusPlano);
+        }
       }
     } catch (e) {
       print('❌ Erro ao verificar atualização do plano: $e');
@@ -63,50 +74,101 @@ class _CheckinScreenState extends State<CheckinScreen> {
   }
 
   Future<void> _loadInitialData() async {
-    await _loadUserData();
-    await _loadPlanoData();
-    await _loadCheckinStats();
-    
-    setState(() {
-      _isLoading = false;
-    });
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      await _loadUserData();
+      await _loadPlanoData();
+      await _loadCheckinStats();
+      
+    } catch (e) {
+      print('❌ Erro ao carregar dados iniciais: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadUserData() async {
     try {
-      final userData = await ApiService.getUserProfile();
+      final prefs = await SharedPreferences.getInstance();
+      final userName = prefs.getString('current_user_name') ?? 'Usuário';
+      final userEmail = prefs.getString('current_user_email') ?? '';
+      
       setState(() {
-        _userData = userData;
+        _userData = {
+          'nome': userName,
+          'email': userEmail,
+        };
       });
     } catch (e) {
-      print('Erro ao carregar dados do usuário: $e');
+      print('❌ Erro ao carregar dados do usuário: $e');
+      setState(() {
+        _userData = {'nome': 'Usuário', 'email': ''};
+      });
     }
   }
 
   Future<void> _loadPlanoData() async {
     try {
-      final planoData = await ApiService.getUserPlano();
-      setState(() {
-        _planoData = planoData;
-      });
-      print('📋 Plano carregado: ${planoData['nome_plano']}');
+      final planoData = await ApiService.getPlanoUsuario(widget.usuarioId.toString());
+      
+      if (planoData['success'] == true) {
+        final nomePlano = planoData['nome_plano'] ?? 'Sem plano';
+        final statusPlano = planoData['status_plano'] ?? 'inativo';
+        
+        setState(() {
+          _planoData = {
+            'nome_plano': nomePlano,
+            'status_plano': statusPlano
+          };
+          _planoAtivo = statusPlano == 'ativo';
+        });
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_plano', nomePlano);
+        await prefs.setString('user_status_plano', statusPlano);
+        
+        print('✅ Plano carregado: $nomePlano - Status: $statusPlano');
+      } else {
+        throw Exception('Erro ao carregar dados do plano');
+      }
     } catch (e) {
-      print('Erro ao carregar dados do plano: $e');
+      print('❌ Erro ao carregar dados do plano: $e');
+      
+      final prefs = await SharedPreferences.getInstance();
+      final cachedPlano = prefs.getString('user_plano') ?? 'Sem plano';
+      final cachedStatus = prefs.getString('user_status_plano') ?? 'inativo';
+      
+      setState(() {
+        _planoData = {
+          'nome_plano': cachedPlano,
+          'status_plano': cachedStatus
+        };
+        _planoAtivo = cachedStatus == 'ativo';
+      });
     }
   }
 
   Future<void> _loadCheckinStats() async {
     try {
-      final stats = await ApiService.getCheckinStats();
+      final stats = await ApiService.getCheckinStats(widget.usuarioId);
       setState(() {
         _checkinStats = stats;
       });
     } catch (e) {
-      print('Erro ao carregar estatísticas: $e');
+      print('❌ Erro ao carregar estatísticas: $e');
+      setState(() {
+        _checkinStats = {'diarios': 0, 'semanais': 0, 'mensais': 0};
+      });
     }
   }
 
-  // 🔄 MÉTODO PARA RECARREGAR TODOS OS DADOS
   Future<void> _recarregarTodosDados() async {
     setState(() {
       _isLoading = true;
@@ -116,34 +178,50 @@ class _CheckinScreenState extends State<CheckinScreen> {
     await _loadPlanoData();
     await _loadCheckinStats();
     
-    setState(() {
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
     
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      const SnackBar(
         content: Text('Dados atualizados!'),
         backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
+        duration: Duration(seconds: 2),
       ),
     );
   }
 
   Future<void> _realizarCheckin() async {
+    if (!_planoAtivo) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _planoData['status_plano'] == 'cancelado' 
+                ? 'Seu plano está cancelado. Reative para fazer check-ins.'
+                : 'Seu plano não está ativo. Entre em contato com o suporte.',
+          ),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isMakingCheckin = true;
     });
 
     try {
-      final response = await ApiService.realizarCheckin();
+      final response = await ApiService.realizarCheckin(widget.usuarioId);
       
       if (response['success'] == true) {
-        // Atualiza as estatísticas
         await _loadCheckinStats();
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(response['message'] ?? 'Check-in realizado com sucesso!'),
+            content: Text(response['message'] ?? 'Check-in realizado com sucesso! 🎉'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
           ),
@@ -160,26 +238,81 @@ class _CheckinScreenState extends State<CheckinScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erro: $e'),
+          content: Text('Erro de conexão: $e'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 3),
         ),
       );
     } finally {
-      setState(() {
-        _isMakingCheckin = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isMakingCheckin = false;
+        });
+      }
     }
   }
 
   String _getIniciais(String nome) {
     if (nome.isEmpty) return 'U';
     
-    List<String> partes = nome.split(' ');
+    final partes = nome.trim().split(' ');
     if (partes.length >= 2) {
       return '${partes[0][0]}${partes[1][0]}'.toUpperCase();
     }
     return nome.length >= 2 ? nome.substring(0, 2).toUpperCase() : nome.toUpperCase();
+  }
+
+  Widget _buildStatusPlano() {
+    final status = _planoData['status_plano'] ?? 'inativo';
+    Color statusColor;
+    String statusText;
+    IconData statusIcon;
+    
+    switch (status) {
+      case 'ativo':
+        statusColor = Colors.green;
+        statusText = 'PLANO ATIVO';
+        statusIcon = Icons.check_circle;
+        break;
+      case 'cancelado':
+        statusColor = Colors.red;
+        statusText = 'PLANO CANCELADO';
+        statusIcon = Icons.warning;
+        break;
+      case 'inativo':
+      default:
+        statusColor = Colors.orange;
+        statusText = 'PLANO INATIVO';
+        statusIcon = Icons.warning;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: statusColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: statusColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            statusIcon,
+            size: 12,
+            color: statusColor,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            statusText,
+            style: TextStyle(
+              color: statusColor,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -187,266 +320,256 @@ class _CheckinScreenState extends State<CheckinScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text('Check-in'),
+        title: const Text('Check-in'),
         backgroundColor: Colors.green[700],
+        foregroundColor: Colors.white,
         actions: [
-          // 🔄 BOTÃO PARA ATUALIZAR MANUALMENTE
           IconButton(
-            icon: Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh),
             onPressed: _isLoading ? null : _recarregarTodosDados,
             tooltip: 'Atualizar dados',
           ),
         ],
       ),
       body: _isLoading
-          ? Center(
+          ? const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.green[700]!),
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Text(
                     'Carregando...',
                     style: TextStyle(
-                      color: Colors.grey[600],
+                      color: Colors.grey,
                       fontSize: 16,
                     ),
                   ),
                 ],
               ),
             )
-          : Column(
-              children: [
-                // Header com foto do usuário
-                Container(
-                  height: 150,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Colors.green[700]!, Colors.green[500]!],
-                    ),
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(20),
-                      bottomRight: Radius.circular(20),
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
-                    child: Row(
-                      children: [
-                        // Avatar com iniciais
-                        Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black26,
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Center(
-                            child: Text(
-                              _getIniciais(_userData['nome'] ?? ''),
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green[700],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        // Nome e plano
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                _userData['nome'] ?? 'Usuário',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 5),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      _planoData['nome_plano'] ?? 'Sem plano',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    // 🔄 INDICADOR DE PLANO ATIVO
-                                    if (_planoData['nome_plano'] != 'Sem plano')
-                                      Icon(Icons.check_circle, size: 12, color: Colors.white),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 20),
-                
-                // Informações sobre checkins
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Check-in',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Faça seu check-in diário e acompanhe suas estatísticas',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 30),
-                
-                // Cards de estatísticas
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      _buildStatCard('Diários', _checkinStats['diarios']!, Colors.blue),
-                      const SizedBox(width: 10),
-                      _buildStatCard('Semanas', _checkinStats['semanais']!, Colors.orange),
-                      const SizedBox(width: 10),
-                      _buildStatCard('Mensais', _checkinStats['mensais']!, Colors.purple),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 30),
-                
-                // 🔄 INDICADOR DE ATUALIZAÇÃO AUTOMÁTICA
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
+          : SafeArea(
+              child: Column(
+                children: [
+                  // Header com foto do usuário
+                  Container(
+                    height: 150,
                     decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue[100]!),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Colors.green[700]!, Colors.green[500]!],
+                      ),
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(20),
+                        bottomRight: Radius.circular(20),
+                      ),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.sync, size: 16, color: Colors.blue[700]),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Dados atualizados automaticamente',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.blue[800],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                const Spacer(),
-                
-                // Botão de check-in
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: _isMakingCheckin
-                        ? ElevatedButton(
-                            onPressed: null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green[700],
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                const Text(
-                                  'PROCESSANDO...',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                      child: Row(
+                        children: [
+                          // Avatar com iniciais
+                          Container(
+                            width: 60,
+                            height: 60,
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 4,
+                                  offset: Offset(0, 2),
                                 ),
                               ],
                             ),
-                          )
-                        : ElevatedButton(
-                            onPressed: _realizarCheckin,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green[700],
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 2,
-                            ),
-                            child: const Text(
-                              'CHECK-IN',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                            child: Center(
+                              child: Text(
+                                _getIniciais(_userData['nome'] ?? ''),
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green[700]!,
+                                ),
                               ),
                             ),
                           ),
+                          const SizedBox(width: 15),
+                          // Nome e plano
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _userData['nome'] ?? 'Usuário',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  _planoData['nome_plano'] ?? 'Sem plano',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                _buildStatusPlano(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Informações sobre checkins
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Check-in',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Faça seu check-in diário e acompanhe suas estatísticas',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 30),
+                  
+                  // Cards de estatísticas
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        _buildStatCard('Hoje', _checkinStats['diarios']!, Colors.blue),
+                        const SizedBox(width: 10),
+                        _buildStatCard('Esta Semana', _checkinStats['semanais']!, Colors.orange),
+                        const SizedBox(width: 10),
+                        _buildStatCard('Este Mês', _checkinStats['mensais']!, Colors.purple),
+                      ],
+                    ),
+                  ),
+                  
+                  // AVISO SE PLANO NÃO ESTIVER ATIVO
+                  if (!_planoAtivo)
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.orange),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning, color: Colors.orange[800]),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _planoData['status_plano'] == 'cancelado'
+                                    ? 'Seu plano está cancelado. Reative para fazer check-ins.'
+                                    : 'Seu plano não está ativo. Entre em contato com o suporte.',
+                                style: TextStyle(
+                                  color: Colors.orange[800],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  
+                  const Spacer(),
+                  
+                  // Botão de check-in
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: _isMakingCheckin
+                          ? ElevatedButton(
+                              onPressed: null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green[700],
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  ),
+                                  SizedBox(width: 10),
+                                  Text(
+                                    'PROCESSANDO...',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ElevatedButton(
+                              onPressed: _planoAtivo ? _realizarCheckin : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _planoAtivo ? Colors.green[700] : Colors.grey[400],
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 2,
+                              ),
+                              child: Text(
+                                _planoAtivo ? 'FAZER CHECK-IN' : 'PLANO NÃO ATIVO',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
     );
   }
@@ -458,11 +581,11 @@ class _CheckinScreenState extends State<CheckinScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
               color: Colors.black12,
               blurRadius: 4,
-              offset: const Offset(0, 2),
+              offset: Offset(0, 2),
             ),
           ],
         ),
@@ -485,6 +608,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
                 color: Colors.grey[600],
                 fontWeight: FontWeight.w500,
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),

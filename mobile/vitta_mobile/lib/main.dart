@@ -7,6 +7,7 @@ import 'screens/reset_password_screen.dart';
 import 'screens/planos_screen.dart';
 import 'screens/selecao_plano_screen.dart';
 import 'screens/pagamento_screen.dart';
+import 'screens/checkin_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -40,23 +41,36 @@ class MyApp extends StatelessWidget {
             return MaterialPageRoute(
               builder: (_) => ResetPasswordScreen(email: args?['email'] ?? ''),
             );
+            
           case '/home':
             final args = settings.arguments as Map<String, dynamic>?;
             return MaterialPageRoute(
               builder: (_) => HomeScreen(
                 nomeUsuario: args?['nomeUsuario'] ?? 'Usuário',
                 usuarioId: args?['usuarioId'] ?? 0,
+                token: args?['token'] ?? '', // ✅ ADICIONADO: token
               ),
             );
+            
           case '/planos':
             final args = settings.arguments as Map<String, dynamic>?;
             return MaterialPageRoute(
               builder: (_) => PlanosScreen(
                 nomeUsuario: args?['nomeUsuario'] ?? 'Usuário',
-                planoUsuario: args?['planoUsuario'] ?? 'Sem plano',
-                usuarioId: args?['usuarioId'] ?? 0, // ✅ ADICIONAR usuarioId
+                usuarioId: args?['usuarioId'] ?? 0,
+                token: args?['token'] ?? '', // ✅ ADICIONADO: token
+                onPlanoAtualizado: args?['onPlanoAtualizado'], // ✅ ADICIONADO: callback
               ),
             );
+            
+          case '/checkin':
+            final args = settings.arguments as Map<String, dynamic>?;
+            return MaterialPageRoute(
+              builder: (_) => CheckinScreen(
+                usuarioId: args?['usuarioId'] ?? 0, // ✅ ADICIONADO: usuarioId
+              ),
+            );
+            
           default:
             return MaterialPageRoute(
               builder: (_) => const LoginScreen(),

@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/plano.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://192.168.1.100:3000';
+  static const String baseUrl = 'http://192.168.1.101:3000';
 
   // Método para obter headers com token
   static Future<Map<String, String>> _getHeaders() async {
@@ -18,10 +18,10 @@ class ApiService {
   }
 
   // ---------- BUSCAR ESTATÍSTICAS DE CHECKIN ----------
-  static Future<Map<String, int>> getCheckinStats() async {
+  static Future<Map<String, int>> getCheckinStats([int? usuarioId]) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('user_id');
+      final userId = usuarioId?.toString() ?? prefs.getString('user_id');
 
       if (userId == null) {
         print('❌ User ID não encontrado');
@@ -57,6 +57,91 @@ class ApiService {
     }
   }
 
+  // ✅ NOVO MÉTODO: REALIZAR CHECKIN COM USER ID ESPECÍFICO
+  static Future<Map<String, dynamic>> realizarCheckin([int? usuarioId]) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = usuarioId?.toString() ?? prefs.getString('user_id');
+
+      if (userId == null) {
+        return {'success': false, 'message': 'Usuário não identificado'};
+      }
+
+      print('📍 Realizando check-in para usuário: $userId');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/checkins'),
+        headers: await _getHeaders(),
+        body: jsonEncode({'usuario_id': userId}),
+      );
+
+      print('📡 Status Code: ${response.statusCode}');
+      print('📡 Response: ${response.body}');
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Check-in realizado com sucesso! 🎉'
+        };
+      } else {
+        final error = jsonDecode(response.body);
+        return {
+          'success': false,
+          'message': error['message'] ?? 'Erro ao realizar check-in',
+        };
+      }
+    } catch (e) {
+      print('❌ Erro ao realizar check-in: $e');
+      return {'success': false, 'message': 'Erro de conexão: $e'};
+    }
+  }
+
+  // ✅ NOVO MÉTODO: BUSCAR PLANO DO USUÁRIO ESPECÍFICO
+  static Future<Map<String, dynamic>> getPlanoUsuario(String usuarioId) async {
+    try {
+      print('🔍 Buscando plano do usuário específico: $usuarioId');
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/auth-usuarios/$usuarioId/plano'),
+        headers: await _getHeaders(),
+      );
+
+      print('📡 Status Code: ${response.statusCode}');
+      print('📡 Response: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        if (data['success'] == true) {
+          print('✅ Plano encontrado: ${data['nome_plano']} - Status: ${data['status_plano']}');
+          return {
+            'success': true,
+            'nome_plano': data['nome_plano'] ?? 'Sem plano',
+            'status_plano': data['status_plano'] ?? 'inativo',
+            'descricao_plano': data['descricao_plano'] ?? '',
+            'preco_plano': data['preco_plano'] ?? 0,
+            'status_pagamento': data['status_pagamento'] ?? 'pendente',
+          };
+        } else {
+          return {
+            'success': false,
+            'nome_plano': 'Sem plano',
+            'status_plano': 'inativo',
+          };
+        }
+      } else {
+        print('❌ Erro ao buscar plano específico: ${response.statusCode}');
+        // Fallback para método antigo
+        return await getUserPlano();
+      }
+    } catch (e) {
+      print('❌ Exception ao buscar plano específico: $e');
+      // Fallback para método antigo
+      return await getUserPlano();
+    }
+  }
+
   // ---------- LOGIN ----------
   static Future<Map<String, dynamic>> login(String email, String senha) async {
     try {
@@ -87,6 +172,8 @@ class ApiService {
           await prefs.setString('user_id', data['usuario']['id'].toString());
           await prefs.setString('user_name', data['usuario']['nome']);
           await prefs.setString('user_email', data['usuario']['email']);
+          await prefs.setString('current_user_name', data['usuario']['nome']);
+          await prefs.setString('current_user_email', data['usuario']['email']);
 
           print('✅ Login realizado com sucesso!');
           return {
@@ -164,6 +251,8 @@ class ApiService {
           await prefs.setString('user_id', data['usuario']['id'].toString());
           await prefs.setString('user_name', data['usuario']['nome']);
           await prefs.setString('user_email', data['usuario']['email']);
+          await prefs.setString('current_user_name', data['usuario']['nome']);
+          await prefs.setString('current_user_email', data['usuario']['email']);
           await prefs.setString(
             'user_status',
             data['usuario']['status'] ?? 'pending',
@@ -334,7 +423,7 @@ class ApiService {
     };
   }
 
-  // ---------- BUSCAR PLANO DO USUÁRIO ----------
+  // ---------- BUSCAR PLANO DO USUÁRIO (MÉTODO ANTIGO) ----------
   static Future<Map<String, dynamic>> getUserPlano() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -365,36 +454,6 @@ class ApiService {
     } catch (e) {
       print('❌ Exception ao buscar plano: $e');
       return {'nome_plano': 'Sem plano'};
-    }
-  }
-
-  // ---------- REALIZAR CHECKIN ----------
-  static Future<Map<String, dynamic>> realizarCheckin() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('user_id');
-
-      if (userId == null) {
-        return {'success': false, 'message': 'Usuário não identificado'};
-      }
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/checkins'),
-        headers: await _getHeaders(),
-        body: jsonEncode({'usuario_id': userId}),
-      );
-
-      if (response.statusCode == 201) {
-        return {'success': true, 'message': 'Check-in realizado com sucesso!'};
-      } else {
-        final error = jsonDecode(response.body);
-        return {
-          'success': false,
-          'message': error['message'] ?? 'Erro ao realizar check-in',
-        };
-      }
-    } catch (e) {
-      return {'success': false, 'message': 'Erro de conexão: $e'};
     }
   }
 

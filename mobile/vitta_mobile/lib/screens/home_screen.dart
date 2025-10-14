@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // ✅ ADICIONAR IMPORT
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vitta_mobile/services/api_service.dart';
 import 'checkin_screen.dart';
 import 'planos_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String nomeUsuario;
   final int usuarioId;
+  final String token;
 
   const HomeScreen({
     super.key,
     required this.nomeUsuario,
     required this.usuarioId,
+    required this.token,
   });
 
   @override
@@ -20,7 +23,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   int currentIndex = 1;
   late final AnimationController animationController;
-  String _planoUsuario = 'Sem plano'; // ✅ ADICIONAR PARA ARMAZENAR O PLANO
+  String _planoUsuario = 'Carregando...';
+  String _statusPlano = 'Carregando...';
+  bool _loadingPlano = true;
 
   @override
   void initState() {
@@ -29,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _carregarPlanoUsuario(); // ✅ CARREGAR PLANO DO USUÁRIO
+    _carregarDadosUsuario();
   }
 
   @override
@@ -38,17 +43,74 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.dispose();
   }
 
-  // ✅ MÉTODO PARA CARREGAR PLANO DO USUÁRIO
-  Future<void> _carregarPlanoUsuario() async {
+  Future<void> _carregarDadosUsuario() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final plano = prefs.getString('user_plano') ?? 'Sem plano';
       setState(() {
-        _planoUsuario = plano;
+        _loadingPlano = true;
       });
+
+      // ✅ CORREÇÃO: Buscar dados atualizados da API
+      final planoData = await ApiService.getPlanoUsuario(widget.usuarioId.toString());
+      
+      if (planoData['success'] == true) {
+        final planoNome = planoData['nome_plano'] ?? 'Sem plano';
+        final statusPlano = planoData['status_plano'] ?? 'inativo';
+        
+        // ✅ CORREÇÃO: Salvar no SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_plano', planoNome);
+        await prefs.setString('user_status_plano', statusPlano);
+        await prefs.setInt('current_user_id', widget.usuarioId);
+        await prefs.setString('current_user_name', widget.nomeUsuario);
+        await prefs.setString('user_token', widget.token);
+
+        setState(() {
+          _planoUsuario = planoNome;
+          _statusPlano = statusPlano;
+          _loadingPlano = false;
+        });
+        
+        print('✅ Dados do usuário carregados: $planoNome - $statusPlano');
+      } else {
+        throw Exception('Erro ao carregar plano');
+      }
     } catch (e) {
-      print('❌ Erro ao carregar plano do usuário: $e');
+      print('❌ Erro ao carregar dados do usuário: $e');
+      
+      // ✅ CORREÇÃO: Tentar carregar do cache em caso de erro
+      final prefs = await SharedPreferences.getInstance();
+      final cachedPlano = prefs.getString('user_plano') ?? 'Sem plano';
+      final cachedStatus = prefs.getString('user_status_plano') ?? 'inativo';
+      
+      setState(() {
+        _planoUsuario = cachedPlano;
+        _statusPlano = cachedStatus;
+        _loadingPlano = false;
+      });
     }
+  }
+
+  void _atualizarDadosUsuario() async {
+    await _carregarDadosUsuario();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Dados atualizados! Plano: $_planoUsuario - Status: $_statusPlano'),
+        duration: const Duration(seconds: 2),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  void _limparDadosUsuario() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user_plano');
+    await prefs.remove('user_status_plano');
+    await prefs.remove('current_user_id');
+    await prefs.remove('current_user_name');
+    await prefs.remove('user_token');
+    
+    print('✅ Dados do usuário limpos');
   }
 
   void onTabTapped(int index) {
@@ -58,24 +120,63 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
+  Future<void> _sair() async {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Sair'),
+          content: const Text('Tem certeza que deseja sair?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                _limparDadosUsuario();
+                Navigator.of(context).pushReplacementNamed('/login');
+              },
+              child: const Text('Sair', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final nome = widget.nomeUsuario;
     final iniciais = nome.isNotEmpty
-        ? nome.trim().split(' ').map((e) => e[0]).take(2).join().toUpperCase()
+        ? nome.trim().split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join().toUpperCase()
         : 'U';
 
     final List<Widget> telas = [
-      CheckinScreen(),
+      CheckinScreen(usuarioId: widget.usuarioId),
       _homeBody(nome, iniciais),
       PlanosScreen(
         nomeUsuario: widget.nomeUsuario,
-        planoUsuario: _planoUsuario, // ✅ USAR PLANO CARREGADO
-        usuarioId: widget.usuarioId, // ✅ PASSAR ID DO USUÁRIO
+        usuarioId: widget.usuarioId,
+        token: widget.token,
+        onPlanoAtualizado: _carregarDadosUsuario,
       ),
     ];
 
     return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Text('Vitta Mobile'),
+        backgroundColor: Colors.green[700],
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.exit_to_app),
+            onPressed: _sair,
+            tooltip: 'Sair',
+          ),
+        ],
+      ),
       body: telas[currentIndex],
       bottomNavigationBar: _footer(),
     );
@@ -88,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // CABEÇALHO
+            // Header do usuário
             Container(
               padding: const EdgeInsets.all(16),
               width: double.infinity,
@@ -127,16 +228,53 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          'Plano: $_planoUsuario', // ✅ MOSTRAR PLANO ATUAL
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
+                        _loadingPlano
+                            ? const Row(
+                                children: [
+                                  SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Carregando plano...',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Plano: $_planoUsuario',
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Status: $_statusPlano',
+                                    style: TextStyle(
+                                      color: _statusPlano == 'ativo' 
+                                          ? Colors.green[100] 
+                                          : Colors.orange[100],
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
                         const SizedBox(height: 2),
                         Text(
-                          'ID: ${widget.usuarioId}', // ✅ MOSTRAR ID DO USUÁRIO
+                          'ID: ${widget.usuarioId}',
                           style: const TextStyle(
                             color: Colors.white60,
                             fontSize: 12,
@@ -145,7 +283,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       ],
                     ),
                   ),
-                  // ✅ BOTÃO PARA ATUALIZAR DADOS
                   IconButton(
                     icon: const Icon(Icons.refresh, color: Colors.white),
                     onPressed: _atualizarDadosUsuario,
@@ -157,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
             const SizedBox(height: 20),
 
-            // SEARCH BAR
+            // Barra de busca
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
@@ -175,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
             const SizedBox(height: 20),
 
-            // NOTÍCIA
+            // Dica do dia
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -205,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
             const SizedBox(height: 20),
 
-            // MAIS PERTO DE VOCÊ
+            // Academias perto de você
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -230,22 +367,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ],
               ),
             ),
-
-            const SizedBox(height: 20),
-
-            // ✅ BOTÃO PARA DEBUG - VER DADOS DO USUÁRIO
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              child: ElevatedButton(
-                onPressed: _verificarDadosUsuario,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[50],
-                  foregroundColor: Colors.blue,
-                ),
-                child: const Text('Ver Dados do Usuário (Debug)'),
-              ),
-            ),
           ],
         ),
       ),
@@ -261,11 +382,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         width: 160,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(15),
-          image: DecorationImage(
-            image: AssetImage(imagem),
+          image: const DecorationImage(
+            image: AssetImage('assets/images/gym1.jpg'), // Placeholder
             fit: BoxFit.cover,
             colorFilter: ColorFilter.mode(
-              Colors.black.withOpacity(0.25),
+              Colors.black,
               BlendMode.darken,
             ),
           ),
@@ -328,57 +449,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             onTap: () => onTabTapped(2),
           ),
         ],
-      ),
-    );
-  }
-
-  // ✅ MÉTODO PARA VERIFICAR DADOS DO USUÁRIO (DEBUG)
-  void _verificarDadosUsuario() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    print('🔍 DADOS DO USUÁRIO NO SHARED_PREFERENCES:');
-    print('   ID: ${prefs.getString('user_id')}');
-    print('   Nome: ${prefs.getString('user_name')}');
-    print('   Email: ${prefs.getString('user_email')}');
-    print('   Plano: ${prefs.getString('user_plano')}');
-    print('   Status: ${prefs.getString('user_status')}');
-    print('   Token: ${prefs.getString('token')?.substring(0, 20)}...');
-
-    // Mostrar dialog com informações
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Dados do Usuário'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('ID: ${prefs.getString('user_id')}'),
-              Text('Nome: ${prefs.getString('user_name')}'),
-              Text('Email: ${prefs.getString('user_email')}'),
-              Text('Plano: ${prefs.getString('user_plano') ?? "Não definido"}'),
-              Text('Status: ${prefs.getString('user_status') ?? "Não definido"}'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Fechar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ✅ MÉTODO PARA ATUALIZAR DADOS
-  void _atualizarDadosUsuario() async {
-    await _carregarPlanoUsuario();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Dados atualizados!'),
-        duration: Duration(seconds: 2),
       ),
     );
   }

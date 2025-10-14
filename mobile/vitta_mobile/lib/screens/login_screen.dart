@@ -33,30 +33,51 @@ class _LoginScreenState extends State<LoginScreen> {
       // Faz login
       final res = await ApiService.login(email, senha);
 
-      // VERIFICAÇÃO CORRIGIDA - Checa se foi bem sucedido
-      if (res['success'] == true || res['token'] != null) {
-        final usuario = res['usuario'] ?? {};
+      // ✅ CORREÇÃO: Verificação de acordo com o backend
+      if (res['token'] != null && res['usuario'] != null) {
+        final usuario = res['usuario'];
         final usuarioId = usuario['id']?.toString() ?? '';
         final nomeUsuario = usuario['nome'] ?? 'Usuário';
+        final statusUsuario = usuario['status'] ?? 'pending';
 
-        // ✅ CORREÇÃO: Navega para Home usando rotas nomeadas
+        // ✅ VERIFICAÇÃO DE STATUS DO USUÁRIO
+        if (statusUsuario == 'pending') {
+          setState(() {
+            message = "Sua conta está pendente de ativação. Faça o pagamento para ativar.";
+            loading = false;
+          });
+          return;
+        }
+
+        if (statusUsuario == 'inactive') {
+          setState(() {
+            message = "Sua conta está inativa. Entre em contato com o suporte.";
+            loading = false;
+          });
+          return;
+        }
+
+        // ✅ NAVEGAÇÃO PARA HOME APÓS LOGIN BEM-SUCEDIDO
         Navigator.pushReplacementNamed(
           context,
           '/home',
           arguments: {
             'nomeUsuario': nomeUsuario,
             'usuarioId': int.tryParse(usuarioId) ?? 0,
+            'token': res['token'],
           },
         );
       } else {
-        // Mostra mensagem de erro
+        // Mostra mensagem de erro do backend
         setState(() => message = res['message'] ?? 'Erro ao fazer login');
       }
     } catch (e) {
       setState(() => message = 'Erro ao conectar com o servidor: $e');
       print('❌ Erro no login: $e');
     } finally {
-      setState(() => loading = false);
+      if (mounted) {
+        setState(() => loading = false);
+      }
     }
   }
 
@@ -99,6 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 4),
               TextField(
                 controller: emailController,
+                keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
                   hintText: 'Digite seu email',
                   prefixIcon: const Icon(Icons.email_outlined),
@@ -131,7 +153,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: () {
-                    // ✅ CORREÇÃO: Usar rotas nomeadas
                     Navigator.pushNamed(context, '/forgot-password');
                   },
                   child: const Text(
@@ -170,19 +191,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 10),
 
-              // Mensagem de erro
+              // Mensagem de erro/sucesso
               if (message.isNotEmpty)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.red[50],
+                    color: message.contains("pendente") ? Colors.orange[50] : Colors.red[50],
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red[200]!),
+                    border: Border.all(
+                      color: message.contains("pendente") 
+                          ? Colors.orange[200]! 
+                          : Colors.red[200]!
+                    ),
                   ),
                   child: Text(
                     message,
-                    style: TextStyle(color: Colors.red[700], fontSize: 14),
+                    style: TextStyle(
+                      color: message.contains("pendente") 
+                          ? Colors.orange[700] 
+                          : Colors.red[700], 
+                      fontSize: 14
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -196,7 +226,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Text("Não tem conta? "),
                   TextButton(
                     onPressed: () {
-                      // ✅ CORREÇÃO: Usar rotas nomeadas
                       Navigator.pushNamed(context, '/register');
                     },
                     child: const Text(
