@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vitta_mobile/services/api_service.dart';
@@ -9,7 +10,7 @@ class HomeScreen extends StatefulWidget {
   final String nomeUsuario;
   final int usuarioId;
   final String token;
-  final bool isDarkTheme; // 👈 adiciona
+  final bool isDarkTheme;
   final VoidCallback onToggleTheme;
 
   const HomeScreen({
@@ -33,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen>
   String _statusPlano = 'Carregando...';
   bool _loadingPlano = true;
   bool _isDarkTheme = false;
+  Timer? _realTimeTimer;
 
   @override
   void initState() {
@@ -43,12 +45,46 @@ class _HomeScreenState extends State<HomeScreen>
     );
     _carregarTema();
     _carregarDadosUsuario();
+    _startRealTimePlanoUpdate();
   }
 
   @override
   void dispose() {
     animationController.dispose();
+    _realTimeTimer?.cancel();
     super.dispose();
+  }
+
+  void _startRealTimePlanoUpdate() {
+    // Atualiza a cada 5 segundos
+    _realTimeTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) _atualizarPlanoSeNecessario();
+    });
+  }
+
+  Future<void> _atualizarPlanoSeNecessario() async {
+    try {
+      final planoData =
+          await ApiService.getPlanoUsuario(widget.usuarioId.toString());
+      if (planoData['success'] == true) {
+        final novoPlano = planoData['nome_plano'] ?? 'Sem plano';
+        final novoStatus = planoData['status_plano'] ?? 'inativo';
+
+        // Atualiza apenas se mudou
+        if (novoPlano != _planoUsuario || novoStatus != _statusPlano) {
+          setState(() {
+            _planoUsuario = novoPlano;
+            _statusPlano = novoStatus;
+          });
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_plano', novoPlano);
+          await prefs.setString('user_status_plano', novoStatus);
+        }
+      }
+    } catch (e) {
+      debugPrint('Erro atualização real-time: $e');
+    }
   }
 
   Future<void> _carregarTema() async {
@@ -106,17 +142,6 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  void _atualizarDadosUsuario() async {
-    await _carregarDadosUsuario();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Dados atualizados: $_planoUsuario ($_statusPlano)'),
-        backgroundColor: Colors.green[700],
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
   void _limparDadosUsuario() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
@@ -172,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         usuarioId: widget.usuarioId,
         token: widget.token,
-        //onPlanoAtualizado: _carregarDadosUsuario,
+        isDarkTheme: _isDarkTheme,
       ),
     ];
 
@@ -215,21 +240,17 @@ class _HomeScreenState extends State<HomeScreen>
     final textColor = isDark ? Colors.white70 : Colors.black87;
 
     final nome = widget.nomeUsuario;
-    final iniciais = nome.isNotEmpty
-        ? nome.trim().split(' ').map((e) => e[0]).take(2).join().toUpperCase()
-        : 'U';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Usando HeaderCard padronizado
           HeaderCard(
             nome: nome,
             plano: _planoUsuario,
             status: _statusPlano,
             planoAtivo: _statusPlano == 'ativo',
-            onRefresh: _atualizarDadosUsuario,
+            onRefresh: _carregarDadosUsuario,
           ),
           const SizedBox(height: 20),
           _searchBar(),
@@ -292,6 +313,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _academiasSection() {
+    final isDark = _isDarkTheme;
+    final textColor = isDark ? Colors.white70 : Colors.black87;
+
     final academias = [
       {"nome": "26 Fit", "img": "assets/images/gym1.jpg"},
       {"nome": "Malhação", "img": "assets/images/gym2.jpeg"},
@@ -303,12 +327,20 @@ class _HomeScreenState extends State<HomeScreen>
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
+          children: [
             Text(
               "Academias próximas",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
             ),
-            Icon(Icons.arrow_forward_ios_rounded, size: 16),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 16,
+              color: textColor,
+            ),
           ],
         ),
         const SizedBox(height: 10),

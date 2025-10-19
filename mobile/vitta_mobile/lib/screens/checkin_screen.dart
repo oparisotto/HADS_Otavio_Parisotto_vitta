@@ -20,21 +20,18 @@ class CheckinScreen extends StatefulWidget {
 
 class _CheckinScreenState extends State<CheckinScreen> {
   Map<String, dynamic> _userData = {};
-  Map<String, dynamic> _planoData = {
-    'nome_plano': 'Carregando...',
-    'status_plano': 'carregando',
-  };
+  Map<String, dynamic> _planoData = {'nome_plano': 'Carregando...', 'status_plano': 'carregando'};
   Map<String, int> _checkinStats = {'diarios': 0, 'semanais': 0, 'mensais': 0};
   bool _isLoading = true;
   bool _isMakingCheckin = false;
-  Timer? _updateTimer;
   bool _planoAtivo = false;
+  Timer? _updateTimer;
 
   @override
   void initState() {
     super.initState();
     _loadInitialData();
-    _setupUpdateListener();
+    _startPlanoUpdateListener();
   }
 
   @override
@@ -43,38 +40,32 @@ class _CheckinScreenState extends State<CheckinScreen> {
     super.dispose();
   }
 
-  void _setupUpdateListener() {
-    _updateTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (mounted) _carregarPlanoAtualizado();
+  void _startPlanoUpdateListener() {
+    _updateTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _updatePlanoRealTime();
     });
   }
 
-  Future<void> _carregarPlanoAtualizado() async {
+  Future<void> _updatePlanoRealTime() async {
     try {
-      final planoAtualizado = await ApiService.getPlanoUsuario(
-        widget.usuarioId.toString(),
-      );
+      final planoAtualizado = await ApiService.getPlanoUsuario(widget.usuarioId.toString());
       if (planoAtualizado['success'] == true) {
-        final novoNomePlano = planoAtualizado['nome_plano'] ?? 'Sem plano';
-        final novoStatusPlano = planoAtualizado['status_plano'] ?? 'inativo';
+        final novoNome = planoAtualizado['nome_plano'] ?? 'Sem plano';
+        final novoStatus = planoAtualizado['status_plano'] ?? 'inativo';
 
-        if (novoNomePlano != _planoData['nome_plano'] ||
-            novoStatusPlano != _planoData['status_plano']) {
+        if (novoNome != _planoData['nome_plano'] || novoStatus != _planoData['status_plano']) {
           setState(() {
-            _planoData = {
-              'nome_plano': novoNomePlano,
-              'status_plano': novoStatusPlano,
-            };
-            _planoAtivo = novoStatusPlano == 'ativo';
+            _planoData = {'nome_plano': novoNome, 'status_plano': novoStatus};
+            _planoAtivo = novoStatus == 'ativo';
           });
 
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('user_plano', novoNomePlano);
-          await prefs.setString('user_status_plano', novoStatusPlano);
+          await prefs.setString('user_plano', novoNome);
+          await prefs.setString('user_status_plano', novoStatus);
         }
       }
     } catch (e) {
-      debugPrint('❌ Erro ao verificar atualização do plano: $e');
+      debugPrint('❌ Erro ao atualizar plano em tempo real: $e');
     }
   }
 
@@ -99,20 +90,18 @@ class _CheckinScreenState extends State<CheckinScreen> {
 
   Future<void> _loadPlanoData() async {
     try {
-      final planoData = await ApiService.getPlanoUsuario(
-        widget.usuarioId.toString(),
-      );
-      if (planoData['success'] == true) {
-        final nomePlano = planoData['nome_plano'] ?? 'Sem plano';
-        final statusPlano = planoData['status_plano'] ?? 'inativo';
+      final plano = await ApiService.getPlanoUsuario(widget.usuarioId.toString());
+      if (plano['success'] == true) {
+        final nome = plano['nome_plano'] ?? 'Sem plano';
+        final status = plano['status_plano'] ?? 'inativo';
         setState(() {
-          _planoData = {'nome_plano': nomePlano, 'status_plano': statusPlano};
-          _planoAtivo = statusPlano == 'ativo';
+          _planoData = {'nome_plano': nome, 'status_plano': status};
+          _planoAtivo = status == 'ativo';
         });
 
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_plano', nomePlano);
-        await prefs.setString('user_status_plano', statusPlano);
+        await prefs.setString('user_plano', nome);
+        await prefs.setString('user_status_plano', status);
       }
     } catch (e) {
       debugPrint('❌ Erro ao carregar plano: $e');
@@ -124,11 +113,11 @@ class _CheckinScreenState extends State<CheckinScreen> {
       final stats = await ApiService.getCheckinStats(widget.usuarioId);
       setState(() => _checkinStats = stats);
     } catch (e) {
-      debugPrint('❌ Erro ao carregar estatísticas: $e');
+      debugPrint('❌ Erro ao carregar estatísticas de check-in: $e');
     }
   }
 
-  Future<void> _recarregarTodosDados() async {
+  Future<void> _refreshAllData() async {
     await _loadInitialData();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -145,7 +134,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Plano inativo. Reative para fazer check-ins.'),
-          backgroundColor: Colors.orange,
+          backgroundColor: Colors.redAccent,
         ),
       );
       return;
@@ -158,9 +147,7 @@ class _CheckinScreenState extends State<CheckinScreen> {
         await _loadCheckinStats();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              response['message'] ?? 'Check-in realizado com sucesso! 🎉',
-            ),
+            content: Text(response['message'] ?? 'Check-in realizado com sucesso! 🎉'),
             backgroundColor: Colors.green,
           ),
         );
@@ -194,20 +181,19 @@ class _CheckinScreenState extends State<CheckinScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _recarregarTodosDados,
+              onRefresh: _refreshAllData,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Usa o HeaderCard da pasta models
                     HeaderCard(
                       nome: _userData['nome'] ?? 'Usuário',
                       plano: _planoData['nome_plano'] ?? 'Sem plano',
                       status: _planoData['status_plano'] ?? 'inativo',
                       planoAtivo: _planoAtivo,
-                      onRefresh: _recarregarTodosDados,
+                      onRefresh: _refreshAllData,
                     ),
                     const SizedBox(height: 24),
                     Text(
@@ -222,60 +208,24 @@ class _CheckinScreenState extends State<CheckinScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _buildStatCard(
-                          'Hoje',
-                          _checkinStats['diarios']!,
-                          Colors.blue,
-                        ),
-                        _buildStatCard(
-                          'Semana',
-                          _checkinStats['semanais']!,
-                          Colors.orange,
-                        ),
-                        _buildStatCard(
-                          'Mês',
-                          _checkinStats['mensais']!,
-                          Colors.purple,
-                        ),
+                        _buildStatCard('Hoje', _checkinStats['diarios']!, Colors.blue),
+                        _buildStatCard('Semana', _checkinStats['semanais']!, Colors.orange),
+                        _buildStatCard('Mês', _checkinStats['mensais']!, Colors.purple),
                       ],
                     ),
                     const SizedBox(height: 40),
-                    if (!_planoAtivo)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.orange),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.warning, color: Colors.orange),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Seu plano não está ativo. Reative para realizar check-ins.',
-                                style: TextStyle(
-                                  color: Colors.orange[900],
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    if (!_planoAtivo) _planoInativoBanner(),
                     const SizedBox(height: 30),
                     Center(
                       child: SizedBox(
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: _isMakingCheckin || !_planoAtivo
-                              ? null
-                              : _realizarCheckin,
+                          onPressed: _isMakingCheckin || !_planoAtivo ? null : _realizarCheckin,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                isDark ? Colors.green[700] : Colors.green,
+                            backgroundColor: _planoAtivo
+                                ? (isDark ? Colors.green[700] : Colors.green)
+                                : (isDark ? Colors.grey[800] : Colors.grey[400]),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -289,11 +239,12 @@ class _CheckinScreenState extends State<CheckinScreen> {
                                     color: Colors.white,
                                   ),
                                 )
-                              : const Text(
+                              : Text(
                                   'FAZER CHECK-IN',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
+                                    color: _planoAtivo ? Colors.white : Colors.white70,
                                   ),
                                 ),
                         ),
@@ -303,6 +254,32 @@ class _CheckinScreenState extends State<CheckinScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _planoInativoBanner() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.redAccent),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning, color: Colors.redAccent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Seu plano não está ativo. Reative para realizar check-ins.',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -338,7 +315,10 @@ class _CheckinScreenState extends State<CheckinScreen> {
               ),
             ),
             const SizedBox(height: 5),
-            Text(title, style: TextStyle(color: textColor.withOpacity(0.8))),
+            Text(
+              title,
+              style: TextStyle(color: textColor.withOpacity(0.8)),
+            ),
           ],
         ),
       ),

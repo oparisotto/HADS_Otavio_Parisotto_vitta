@@ -9,12 +9,14 @@ class PlanosScreen extends StatefulWidget {
   final HeaderCard headerCard;
   final int usuarioId;
   final String token;
+  final bool isDarkTheme;
 
   const PlanosScreen({
     Key? key,
     required this.headerCard,
     required this.usuarioId,
     required this.token,
+    required this.isDarkTheme,
   }) : super(key: key);
 
   @override
@@ -29,6 +31,11 @@ class _PlanosScreenState extends State<PlanosScreen> {
   String _statusPlanoAtual = 'carregando...';
   int? _planoAtualId;
   bool _isRefreshing = false;
+
+  bool get isDark => widget.isDarkTheme;
+  Color get backgroundColor => isDark ? const Color(0xFF121212) : Colors.grey[100]!;
+  Color get cardColor => isDark ? const Color(0xFF1E1E1E) : Colors.white;
+  Color get textColor => isDark ? Colors.white70 : Colors.black87;
 
   @override
   void initState() {
@@ -45,9 +52,7 @@ class _PlanosScreenState extends State<PlanosScreen> {
 
   Future<void> _carregarDadosUsuario() async {
     try {
-      final planoData =
-          await ApiService.getPlanoUsuario(widget.usuarioId.toString());
-
+      final planoData = await ApiService.getPlanoUsuario(widget.usuarioId.toString());
       if (planoData['success'] == true) {
         setState(() {
           _planoAtualNome = planoData['nome_plano'] ?? 'Sem plano';
@@ -71,9 +76,7 @@ class _PlanosScreenState extends State<PlanosScreen> {
       final planos = await ApiService.getPlanosList();
       _planosFuture = Future.value(planos);
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Erro ao carregar planos: $e';
-      });
+      setState(() => _errorMessage = 'Erro ao carregar planos: $e');
     }
   }
 
@@ -84,7 +87,7 @@ class _PlanosScreenState extends State<PlanosScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Planos atualizados com sucesso!'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: Colors.green[700],
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -101,7 +104,7 @@ class _PlanosScreenState extends State<PlanosScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(resultado['message'] ?? 'Plano cancelado com sucesso'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: Colors.green[700],
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -125,7 +128,7 @@ class _PlanosScreenState extends State<PlanosScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(resultado['message'] ?? 'Plano reativado com sucesso'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: Colors.green[700],
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -144,7 +147,7 @@ class _PlanosScreenState extends State<PlanosScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
-        backgroundColor: Theme.of(context).colorScheme.error,
+        backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -153,8 +156,8 @@ class _PlanosScreenState extends State<PlanosScreen> {
   void _irParaPagamento(Plano plano) {
     if (_statusPlanoAtual == 'cancelado') {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Reative seu plano atual antes de assinar um novo'),
+        const SnackBar(
+          content: Text('Reative seu plano atual antes de assinar um novo'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -182,7 +185,6 @@ class _PlanosScreenState extends State<PlanosScreen> {
   }
 
   Widget _buildPlanoCard(Plano plano) {
-    final theme = Theme.of(context);
     final bool isPlanoAtual =
         _planoAtualNome.toLowerCase() == plano.nome.toLowerCase() &&
         _statusPlanoAtual != 'inativo' &&
@@ -190,25 +192,26 @@ class _PlanosScreenState extends State<PlanosScreen> {
     final bool planoCancelado = _statusPlanoAtual == 'cancelado';
 
     return Card(
-      color: theme.cardColor,
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      color: cardColor,
+      elevation: isDark ? 0 : 3,
+      shadowColor: Colors.black.withOpacity(0.2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Nome e status
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   plano.nome,
-                  style: theme.textTheme.titleLarge?.copyWith(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.primary,
+                    color: isDark ? Colors.green[300] : Colors.green[700],
+                    fontSize: 18,
                   ),
                 ),
                 if (isPlanoAtual)
@@ -216,17 +219,16 @@ class _PlanosScreenState extends State<PlanosScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: planoCancelado
-                          ? theme.colorScheme.errorContainer
-                          : theme.colorScheme.primaryContainer,
+                          ? Colors.red[200]
+                          : Colors.green[200],
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       planoCancelado ? 'CANCELADO' : 'ATIVO',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: planoCancelado
-                            ? theme.colorScheme.onErrorContainer
-                            : theme.colorScheme.onPrimaryContainer,
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
+                        color: planoCancelado ? Colors.red[800] : Colors.green[800],
+                        fontSize: 12,
                       ),
                     ),
                   ),
@@ -235,16 +237,15 @@ class _PlanosScreenState extends State<PlanosScreen> {
             const SizedBox(height: 12),
             Text(
               plano.descricao,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.8),
-              ),
+              style: TextStyle(color: textColor),
             ),
             const SizedBox(height: 16),
             Text(
               'R\$${plano.preco.toStringAsFixed(2)}',
-              style: theme.textTheme.headlineSmall?.copyWith(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: theme.colorScheme.primary,
+                fontSize: 18,
+                color: isDark ? Colors.green[300] : Colors.green[700],
               ),
             ),
             const SizedBox(height: 16),
@@ -255,8 +256,8 @@ class _PlanosScreenState extends State<PlanosScreen> {
                       ? ElevatedButton(
                           onPressed: _reativarPlano,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary,
-                            foregroundColor: theme.colorScheme.onPrimary,
+                            backgroundColor: isDark ? Colors.green[300] : Colors.green[700],
+                            foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                           child: const Text('Reativar Plano'),
@@ -264,8 +265,8 @@ class _PlanosScreenState extends State<PlanosScreen> {
                       : ElevatedButton(
                           onPressed: _cancelarPlano,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.errorContainer,
-                            foregroundColor: theme.colorScheme.onErrorContainer,
+                            backgroundColor: Colors.red[200],
+                            foregroundColor: Colors.red[800],
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                           child: const Text('Cancelar Plano'),
@@ -273,8 +274,8 @@ class _PlanosScreenState extends State<PlanosScreen> {
                   : ElevatedButton(
                       onPressed: () => _irParaPagamento(plano),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor: theme.colorScheme.onPrimary,
+                        backgroundColor: isDark ? Colors.green[300] : Colors.green[700],
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       child: const Text('Assinar'),
@@ -287,33 +288,28 @@ class _PlanosScreenState extends State<PlanosScreen> {
   }
 
   Widget _erroWidget([String? msg]) {
-    final theme = Theme.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.error_outline, color: theme.colorScheme.error, size: 64),
+          Icon(Icons.error_outline, color: Colors.redAccent, size: 64),
           const SizedBox(height: 16),
           Text(
             'Ops! Algo deu errado',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
+            style: TextStyle(color: textColor, fontSize: 16),
           ),
           const SizedBox(height: 8),
           Text(
             msg ?? _errorMessage,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
-            ),
+            style: TextStyle(color: textColor.withOpacity(0.7)),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: _refreshData,
             style: ElevatedButton.styleFrom(
-              backgroundColor: theme.colorScheme.primary,
-              foregroundColor: theme.colorScheme.onPrimary,
+              backgroundColor: isDark ? Colors.green[300] : Colors.green[700],
+              foregroundColor: Colors.white,
             ),
             child: const Text('Tentar Novamente'),
           ),
@@ -324,21 +320,16 @@ class _PlanosScreenState extends State<PlanosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: backgroundColor,
       body: _isLoading
-          ? Center(
-              child: CircularProgressIndicator(color: theme.colorScheme.primary),
-            )
+          ? Center(child: CircularProgressIndicator(color: isDark ? Colors.green[300] : Colors.green[700]))
           : RefreshIndicator(
               onRefresh: _refreshData,
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    // Header do usuário
                     HeaderCard(
                       nome: widget.headerCard.nome,
                       plano: _planoAtualNome,
@@ -347,36 +338,29 @@ class _PlanosScreenState extends State<PlanosScreen> {
                       onRefresh: _refreshData,
                     ),
                     const SizedBox(height: 24),
-
-                    // Alerta se plano estiver cancelado
                     if (_statusPlanoAtual == 'cancelado')
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.errorContainer.withOpacity(0.3),
+                          color: Colors.red[100]?.withOpacity(0.3),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: theme.colorScheme.errorContainer),
+                          border: Border.all(color: Colors.red[200]!),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.warning_amber_rounded, color: theme.colorScheme.error),
+                            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 'Seu plano está cancelado. Reative para fazer check-ins.',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onErrorContainer,
-                                ),
+                                style: TextStyle(color: textColor),
                               ),
                             ),
                           ],
                         ),
                       ),
-
                     const SizedBox(height: 24),
-
-                    // Lista de planos
                     FutureBuilder<List<Plano>>(
                       future: _planosFuture,
                       builder: (context, snapshot) {
@@ -388,11 +372,10 @@ class _PlanosScreenState extends State<PlanosScreen> {
                           return Center(
                             child: Text(
                               'Nenhum plano disponível',
-                              style: theme.textTheme.bodyMedium,
+                              style: TextStyle(color: textColor),
                             ),
                           );
                         }
-
                         final planos = snapshot.data!;
                         return Column(
                           children: planos.map((p) => _buildPlanoCard(p)).toList(),

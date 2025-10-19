@@ -83,6 +83,7 @@ class _MyAppState extends State<MyApp> {
                 ),
                 usuarioId: usuarioId,
                 token: token,
+                isDarkTheme: _isDarkTheme,
               ),
             );
 
