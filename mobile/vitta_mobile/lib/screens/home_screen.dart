@@ -3,29 +3,36 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vitta_mobile/services/api_service.dart';
 import 'checkin_screen.dart';
 import 'planos_screen.dart';
+import '../models/header_card.dart';
 
 class HomeScreen extends StatefulWidget {
   final String nomeUsuario;
   final int usuarioId;
   final String token;
+  final bool isDarkTheme; // 👈 adiciona
+  final VoidCallback onToggleTheme;
 
   const HomeScreen({
     super.key,
     required this.nomeUsuario,
     required this.usuarioId,
     required this.token,
+    required this.isDarkTheme,
+    required this.onToggleTheme,
   });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   int currentIndex = 1;
   late final AnimationController animationController;
   String _planoUsuario = 'Carregando...';
   String _statusPlano = 'Carregando...';
   bool _loadingPlano = true;
+  bool _isDarkTheme = false;
 
   @override
   void initState() {
@@ -34,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+    _carregarTema();
     _carregarDadosUsuario();
   }
 
@@ -43,20 +51,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.dispose();
   }
 
+  Future<void> _carregarTema() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isDarkTheme = prefs.getBool('isDarkTheme') ?? false;
+    });
+  }
+
+  Future<void> _alternarTema() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isDarkTheme = !_isDarkTheme;
+    });
+    await prefs.setBool('isDarkTheme', _isDarkTheme);
+  }
+
   Future<void> _carregarDadosUsuario() async {
     try {
-      setState(() {
-        _loadingPlano = true;
-      });
+      setState(() => _loadingPlano = true);
 
-      // ✅ CORREÇÃO: Buscar dados atualizados da API
-      final planoData = await ApiService.getPlanoUsuario(widget.usuarioId.toString());
-      
+      final planoData = await ApiService.getPlanoUsuario(
+        widget.usuarioId.toString(),
+      );
+
       if (planoData['success'] == true) {
         final planoNome = planoData['nome_plano'] ?? 'Sem plano';
         final statusPlano = planoData['status_plano'] ?? 'inativo';
-        
-        // ✅ CORREÇÃO: Salvar no SharedPreferences
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_plano', planoNome);
         await prefs.setString('user_status_plano', statusPlano);
@@ -69,19 +90,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           _statusPlano = statusPlano;
           _loadingPlano = false;
         });
-        
-        print('✅ Dados do usuário carregados: $planoNome - $statusPlano');
       } else {
         throw Exception('Erro ao carregar plano');
       }
     } catch (e) {
-      print('❌ Erro ao carregar dados do usuário: $e');
-      
-      // ✅ CORREÇÃO: Tentar carregar do cache em caso de erro
       final prefs = await SharedPreferences.getInstance();
       final cachedPlano = prefs.getString('user_plano') ?? 'Sem plano';
       final cachedStatus = prefs.getString('user_status_plano') ?? 'inativo';
-      
+
       setState(() {
         _planoUsuario = cachedPlano;
         _statusPlano = cachedStatus;
@@ -92,25 +108,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _atualizarDadosUsuario() async {
     await _carregarDadosUsuario();
-    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Dados atualizados! Plano: $_planoUsuario - Status: $_statusPlano'),
+        content: Text('Dados atualizados: $_planoUsuario ($_statusPlano)'),
+        backgroundColor: Colors.green[700],
         duration: const Duration(seconds: 2),
-        backgroundColor: Colors.green,
       ),
     );
   }
 
   void _limparDadosUsuario() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('user_plano');
-    await prefs.remove('user_status_plano');
-    await prefs.remove('current_user_id');
-    await prefs.remove('current_user_name');
-    await prefs.remove('user_token');
-    
-    print('✅ Dados do usuário limpos');
+    await prefs.clear();
   }
 
   void onTabTapped(int index) {
@@ -123,248 +132,157 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _sair() async {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Sair'),
-          content: const Text('Tem certeza que deseja sair?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () {
-                _limparDadosUsuario();
-                Navigator.of(context).pushReplacementNamed('/login');
-              },
-              child: const Text('Sair', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Sair'),
+        content: const Text('Tem certeza que deseja sair da sua conta?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              _limparDadosUsuario();
+              Navigator.of(context).pushReplacementNamed('/login');
+            },
+            child: const Text('Sair'),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final nome = widget.nomeUsuario;
-    final iniciais = nome.isNotEmpty
-        ? nome.trim().split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join().toUpperCase()
-        : 'U';
+    final isDark = _isDarkTheme;
+    final backgroundColor = isDark ? const Color(0xFF121212) : Colors.grey[100];
 
-    final List<Widget> telas = [
-      CheckinScreen(usuarioId: widget.usuarioId),
-      _homeBody(nome, iniciais),
+    final telas = [
+      CheckinScreen(usuarioId: widget.usuarioId, isDarkTheme: _isDarkTheme),
+      _homeBody(),
       PlanosScreen(
-        nomeUsuario: widget.nomeUsuario,
+        headerCard: HeaderCard(
+          nome: widget.nomeUsuario,
+          plano: _planoUsuario,
+          status: _statusPlano,
+          planoAtivo: _statusPlano == 'ativo',
+          onRefresh: _carregarDadosUsuario,
+        ),
         usuarioId: widget.usuarioId,
         token: widget.token,
-        onPlanoAtualizado: _carregarDadosUsuario,
+        //onPlanoAtualizado: _carregarDadosUsuario,
       ),
     ];
 
     return Scaffold(
+      backgroundColor: backgroundColor,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text('Vitta Mobile'),
+        elevation: 3,
+        title: const Text(
+          'Vitta Mobile',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
         backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.exit_to_app),
+            icon: Icon(
+              isDark ? Icons.wb_sunny_rounded : Icons.dark_mode_rounded,
+            ),
+            onPressed: _alternarTema,
+          ),
+          IconButton(
+            icon: const Icon(Icons.exit_to_app_rounded),
             onPressed: _sair,
-            tooltip: 'Sair',
           ),
         ],
       ),
-      body: telas[currentIndex],
-      bottomNavigationBar: _footer(),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        child: telas[currentIndex],
+      ),
+      bottomNavigationBar: _footer(isDark),
     );
   }
 
-  Widget _homeBody(String nome, String iniciais) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.only(top: 0, left: 16, right: 16, bottom: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _homeBody() {
+    final isDark = _isDarkTheme;
+    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDark ? Colors.white70 : Colors.black87;
+
+    final nome = widget.nomeUsuario;
+    final iniciais = nome.isNotEmpty
+        ? nome.trim().split(' ').map((e) => e[0]).take(2).join().toUpperCase()
+        : 'U';
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Usando HeaderCard padronizado
+          HeaderCard(
+            nome: nome,
+            plano: _planoUsuario,
+            status: _statusPlano,
+            planoAtivo: _statusPlano == 'ativo',
+            onRefresh: _atualizarDadosUsuario,
+          ),
+          const SizedBox(height: 20),
+          _searchBar(),
+          const SizedBox(height: 20),
+          _dicaCard(cardColor, textColor),
+          const SizedBox(height: 25),
+          _academiasSection(),
+        ],
+      ),
+    );
+  }
+
+  Widget _searchBar() {
+    final isDark = _isDarkTheme;
+    return TextField(
+      style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+      decoration: InputDecoration(
+        hintText: "Buscar academias, estúdios, cidades...",
+        hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey[600]),
+        prefixIcon: Icon(
+          Icons.search,
+          color: isDark ? Colors.white54 : Colors.grey,
+        ),
+        filled: true,
+        fillColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  Widget _dicaCard(Color cardColor, Color textColor) {
+    return Card(
+      color: cardColor,
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
           children: [
-            // Header do usuário
-            Container(
-              padding: const EdgeInsets.all(16),
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.green[700],
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(30),
-                  bottomRight: Radius.circular(30),
-                ),
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: Colors.white,
-                    child: Text(
-                      iniciais,
-                      style: const TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          nome,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        _loadingPlano
-                            ? const Row(
-                                children: [
-                                  SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white70,
-                                    ),
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Carregando plano...',
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Plano: $_planoUsuario',
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Status: $_statusPlano',
-                                    style: TextStyle(
-                                      color: _statusPlano == 'ativo' 
-                                          ? Colors.green[100] 
-                                          : Colors.orange[100],
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'ID: ${widget.usuarioId}',
-                          style: const TextStyle(
-                            color: Colors.white60,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh, color: Colors.white),
-                    onPressed: _atualizarDadosUsuario,
-                    tooltip: 'Atualizar dados',
-                  ),
-                ],
-              ),
+            const Icon(
+              Icons.local_fire_department_rounded,
+              color: Colors.green,
+              size: 40,
             ),
-
-            const SizedBox(height: 20),
-
-            // Barra de busca
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: const TextField(
-                decoration: InputDecoration(
-                  hintText: "Buscar academias, estúdios, cidades...",
-                  prefixIcon: Icon(Icons.search, color: Colors.grey),
-                  border: InputBorder.none,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Dica do dia
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.2),
-                    blurRadius: 5,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.fitness_center, color: Colors.green, size: 40),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      "Dica do dia: 30 minutos de exercícios físicos por dia aumentam sua energia e melhoram seu humor! 💪",
-                      style: TextStyle(color: Colors.grey[800], fontSize: 14),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Academias perto de você
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  "Mais perto de você",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward_ios, size: 18),
-                  onPressed: () {},
-                ),
-              ],
-            ),
-            SizedBox(
-              height: 140,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  _academiaCard("26 Fit", "assets/images/gym1.jpg"),
-                  _academiaCard("Malhação", "assets/images/gym2.jpeg"),
-                  _academiaCard("Attivita", "assets/images/gym3.jpeg"),
-                ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "💡 Dica do dia: 30 minutos de treino melhoram o humor e aumentam sua disposição!",
+                style: TextStyle(color: textColor),
               ),
             ),
           ],
@@ -373,35 +291,67 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _academiaCard(String nome, String imagem) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      elevation: 4,
-      margin: const EdgeInsets.only(right: 12),
-      child: Container(
-        width: 160,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(15),
-          image: const DecorationImage(
-            image: AssetImage('assets/images/gym1.jpg'), // Placeholder
-            fit: BoxFit.cover,
-            colorFilter: ColorFilter.mode(
-              Colors.black,
-              BlendMode.darken,
+  Widget _academiasSection() {
+    final academias = [
+      {"nome": "26 Fit", "img": "assets/images/gym1.jpg"},
+      {"nome": "Malhação", "img": "assets/images/gym2.jpeg"},
+      {"nome": "Attivita", "img": "assets/images/gym3.jpeg"},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: const [
+            Text(
+              "Academias próximas",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
+            Icon(Icons.arrow_forward_ios_rounded, size: 16),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 150,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: academias.length,
+            itemBuilder: (context, i) {
+              final item = academias[i];
+              return _academiaCard(item['nome']!, item['img']!);
+            },
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _academiaCard(String nome, String imagem) {
+    return Container(
+      width: 160,
+      margin: const EdgeInsets.only(right: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        image: DecorationImage(
+          image: AssetImage(imagem),
+          fit: BoxFit.cover,
+          colorFilter: ColorFilter.mode(
+            Colors.black.withOpacity(0.25),
+            BlendMode.darken,
+          ),
+        ),
+      ),
+      child: Align(
+        alignment: Alignment.bottomLeft,
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Align(
-            alignment: Alignment.bottomLeft,
-            child: Text(
-              nome,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
+          padding: const EdgeInsets.all(10),
+          child: Text(
+            nome,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
             ),
           ),
         ),
@@ -409,77 +359,62 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _footer() {
+  Widget _footer(bool dark) {
+    final icons = [
+      Icons.qr_code_2_rounded,
+      Icons.home_rounded,
+      Icons.attach_money_rounded,
+    ];
+
+    final labels = ['Check-in', 'Home', 'Planos'];
+
     return Container(
-      height: 75,
-      padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 12),
+      margin: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(25),
-          topRight: Radius.circular(25),
-        ),
+        color: dark ? const Color(0xFF1E1E1E) : Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
             offset: const Offset(0, -2),
-            blurRadius: 5,
           ),
         ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _FooterButton(
-            icon: Icons.check_circle_outline,
-            label: 'Check-in',
-            selected: currentIndex == 0,
-            onTap: () => onTabTapped(0),
-          ),
-          _FooterButton(
-            icon: Icons.home_outlined,
-            label: 'Home',
-            selected: currentIndex == 1,
-            onTap: () => onTabTapped(1),
-          ),
-          _FooterButton(
-            icon: Icons.attach_money_rounded,
-            label: 'Planos',
-            selected: currentIndex == 2,
-            onTap: () => onTabTapped(2),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FooterButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _FooterButton({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: selected ? Colors.green[700] : Colors.transparent,
-      ),
-      padding: const EdgeInsets.all(10),
-      child: IconButton(
-        icon: Icon(icon, color: selected ? Colors.white : Colors.grey[700], size: 28),
-        onPressed: onTap,
+        children: List.generate(3, (index) {
+          final selected = currentIndex == index;
+          return GestureDetector(
+            onTap: () => onTabTapped(index),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                color: selected ? Colors.green[700] : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    icons[index],
+                    color: selected
+                        ? Colors.white
+                        : (dark ? Colors.white70 : Colors.grey[700]),
+                  ),
+                  if (selected) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      labels[index],
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }),
       ),
     );
   }

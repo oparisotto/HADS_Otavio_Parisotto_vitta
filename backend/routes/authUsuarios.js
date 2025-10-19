@@ -111,7 +111,7 @@ router.post("/corrigir-status", async (req, res) => {
 
 // -------------------- LOGIN (CORRIGIDO) --------------------
 router.post("/login", async (req, res) => {
-  const { email, senha } = req.body;
+   const { email, senha } = req.body;
   
   try {
     console.log('🔐 Tentativa de login para:', email);

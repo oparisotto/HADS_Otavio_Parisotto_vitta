@@ -8,24 +8,37 @@ import 'screens/planos_screen.dart';
 import 'screens/selecao_plano_screen.dart';
 import 'screens/pagamento_screen.dart';
 import 'screens/checkin_screen.dart';
+import 'models/header_card.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  // Mude para false para tema claro, ou true para tema escuro
+  bool _isDarkTheme = false; // ✅ AGORA COM TEMA CLARO PADRÃO
+
+  void toggleTheme() {
+    setState(() {
+      _isDarkTheme = !_isDarkTheme;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Vitta App',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.green,
-        scaffoldBackgroundColor: Colors.grey[100],
-        useMaterial3: true,
-      ),
+      themeMode: _isDarkTheme ? ThemeMode.dark : ThemeMode.light,
+      theme: _buildLightTheme(),
+      darkTheme: _buildDarkTheme(),
       initialRoute: '/login',
       routes: {
         '/login': (context) => const LoginScreen(),
@@ -35,48 +48,90 @@ class MyApp extends StatelessWidget {
         '/pagamento': (context) => const PagamentoScreen(),
       },
       onGenerateRoute: (settings) {
+        final args = settings.arguments as Map<String, dynamic>?;
+
         switch (settings.name) {
           case '/reset-password':
-            final args = settings.arguments as Map<String, dynamic>?;
             return MaterialPageRoute(
               builder: (_) => ResetPasswordScreen(email: args?['email'] ?? ''),
             );
-            
+
           case '/home':
-            final args = settings.arguments as Map<String, dynamic>?;
             return MaterialPageRoute(
               builder: (_) => HomeScreen(
                 nomeUsuario: args?['nomeUsuario'] ?? 'Usuário',
                 usuarioId: args?['usuarioId'] ?? 0,
-                token: args?['token'] ?? '', // ✅ ADICIONADO: token
+                token: args?['token'] ?? '',
+                isDarkTheme: _isDarkTheme,
+                onToggleTheme: toggleTheme,
               ),
             );
-            
+
           case '/planos':
-            final args = settings.arguments as Map<String, dynamic>?;
+            final nomeUsuario = args?['nomeUsuario'] ?? 'Usuário';
+            final usuarioId = args?['usuarioId'] ?? 0;
+            final token = args?['token'] ?? '';
+
             return MaterialPageRoute(
-              builder: (_) => PlanosScreen(
-                nomeUsuario: args?['nomeUsuario'] ?? 'Usuário',
-                usuarioId: args?['usuarioId'] ?? 0,
-                token: args?['token'] ?? '', // ✅ ADICIONADO: token
-                onPlanoAtualizado: args?['onPlanoAtualizado'], // ✅ ADICIONADO: callback
+              builder: (context) => PlanosScreen(
+                headerCard: HeaderCard(
+                  nome: nomeUsuario,
+                  plano: '', // vai ser atualizado pela tela
+                  status: '', // vai ser atualizado pela tela
+                  planoAtivo: true,
+                  onRefresh: () {}, // a tela vai lidar com refresh
+                ),
+                usuarioId: usuarioId,
+                token: token,
               ),
             );
-            
+
           case '/checkin':
-            final args = settings.arguments as Map<String, dynamic>?;
             return MaterialPageRoute(
               builder: (_) => CheckinScreen(
-                usuarioId: args?['usuarioId'] ?? 0, // ✅ ADICIONADO: usuarioId
+                usuarioId: args?['usuarioId'] ?? 0,
+                isDarkTheme: _isDarkTheme,
               ),
             );
-            
+
           default:
-            return MaterialPageRoute(
-              builder: (_) => const LoginScreen(),
-            );
+            return MaterialPageRoute(builder: (_) => const LoginScreen());
         }
       },
+    );
+  }
+
+  // ✅ Tema Claro
+  ThemeData _buildLightTheme() {
+    return ThemeData(
+      colorScheme: ColorScheme.light(
+        primary: Colors.green, // ✅ VERDE
+        secondary: Colors.greenAccent,
+        background: Colors.grey[50]!,
+        surface: Colors.white,
+        onPrimary: Colors.white,
+        onSurface: Colors.black87,
+      ),
+      scaffoldBackgroundColor: Colors.grey[50],
+      cardColor: Colors.white,
+      useMaterial3: true,
+    );
+  }
+
+  // ✅ Tema Escuro
+  ThemeData _buildDarkTheme() {
+    return ThemeData(
+      colorScheme: ColorScheme.dark(
+        primary: Colors.green, // ✅ VERDE MESMO NO TEMA ESCURO
+        secondary: Colors.greenAccent,
+        background: Colors.grey[900]!,
+        surface: Colors.grey[800]!,
+        onPrimary: Colors.white,
+        onSurface: Colors.white,
+      ),
+      scaffoldBackgroundColor: Colors.grey[900],
+      cardColor: Colors.grey[800],
+      useMaterial3: true,
     );
   }
 }
