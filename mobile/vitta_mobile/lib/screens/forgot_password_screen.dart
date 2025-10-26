@@ -15,6 +15,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   bool codigoEnviado = false;
   bool loading = false;
+  bool showPassword = false;
   String? message;
 
   Future<void> enviarCodigo() async {
@@ -23,7 +24,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() {
       loading = false;
       message = res['message'];
-      if (res['message'].toString().contains("enviado")) {
+      if (res['message'].toString().toLowerCase().contains("enviado")) {
         codigoEnviado = true;
       }
     });
@@ -41,7 +42,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       message = res['message'];
     });
 
-    if (message != null && message!.contains("sucesso")) {
+    if (message != null &&
+        message!.toLowerCase().contains("sucesso")) {
       Navigator.pushReplacementNamed(context, '/login');
     }
   }
@@ -49,55 +51,98 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: const Color(0xFFEFF3EF),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: SingleChildScrollView(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 420),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                // 🧭 Ícone de segurança
+                Container(
+                  height: 80,
+                  width: 80,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2E7D32).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.lock_reset_rounded,
+                    color: Color(0xFF2E7D32),
+                    size: 40,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
                 const Text(
                   "Recuperar Senha",
                   style: TextStyle(
-                    fontSize: 28,
+                    fontSize: 26,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF2E7D32),
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  "Digite seu email cadastrado para receber o código de recuperação",
-                  style: TextStyle(color: Colors.black54, fontSize: 14),
+                Text(
+                  codigoEnviado
+                      ? "Digite o código recebido e crie sua nova senha."
+                      : "Informe seu e-mail cadastrado para receber o código de recuperação.",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.black54, fontSize: 14),
                 ),
-                const SizedBox(height: 40),
-                TextField(
+                const SizedBox(height: 30),
+
+                // 🧾 Campos de formulário
+                _buildTextField(
                   controller: emailController,
-                  decoration: const InputDecoration(
-                    labelText: "Email cadastrado",
-                    border: OutlineInputBorder(),
-                  ),
+                  label: "Email cadastrado",
+                  icon: Icons.email,
+                  enabled: !codigoEnviado,
                 ),
-                const SizedBox(height: 16),
+
                 if (codigoEnviado) ...[
-                  TextField(
+                  const SizedBox(height: 16),
+                  _buildTextField(
                     controller: codigoController,
-                    decoration: const InputDecoration(
-                      labelText: "Código recebido",
-                      border: OutlineInputBorder(),
-                    ),
+                    label: "Código recebido",
+                    icon: Icons.verified,
                   ),
                   const SizedBox(height: 16),
-                  TextField(
+                  _buildTextField(
                     controller: senhaController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: "Nova senha",
-                      border: OutlineInputBorder(),
+                    label: "Nova senha",
+                    icon: Icons.lock,
+                    obscureText: !showPassword,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        showPassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                        color: Colors.grey,
+                      ),
+                      onPressed: () {
+                        setState(() => showPassword = !showPassword);
+                      },
                     ),
                   ),
                 ],
-                const SizedBox(height: 20),
+
+                const SizedBox(height: 24),
+
                 if (message != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -105,43 +150,103 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       message!,
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: message!.contains("sucesso")
+                        color: message!.toLowerCase().contains("sucesso") ||
+                                message!.toLowerCase().contains("enviado")
                             ? Colors.green
                             : Colors.red,
                       ),
                     ),
                   ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2E7D32),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+
+                // 🟩 Botão principal
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E7D32),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 3,
+                    ),
+                    onPressed: loading
+                        ? null
+                        : codigoEnviado
+                            ? resetarSenha
+                            : enviarCodigo,
+                    child: loading
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : Text(
+                            codigoEnviado
+                                ? "Redefinir Senha"
+                                : "Enviar Código",
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
-                  onPressed: loading
-                      ? null
-                      : codigoEnviado
-                          ? resetarSenha
-                          : enviarCodigo,
-                  child: loading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                          codigoEnviado ? "Redefinir Senha" : "Enviar Código",
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold,),
-                        ),
                 ),
-                const SizedBox(height: 20),
+
+                const SizedBox(height: 18),
                 TextButton(
                   onPressed: () => Navigator.pushNamed(context, '/login'),
                   child: const Text(
                     "Voltar ao login",
-                    style: TextStyle(color: Color(0xFF2E7D32)),
+                    style: TextStyle(
+                      color: Color(0xFF2E7D32),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                )
+                ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // 🌿 Campo de texto estilizado
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool obscureText = false,
+    bool enabled = true,
+    Widget? suffixIcon,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      enabled: enabled,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: const Color(0xFF2E7D32)),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: const Color(0xFFF9F9F9),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              const BorderSide(color: Color(0xFF2E7D32), width: 1.5),
         ),
       ),
     );
