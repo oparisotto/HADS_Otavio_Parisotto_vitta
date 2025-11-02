@@ -277,7 +277,7 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
                         TextField(
                           controller: _nomeTitularController,
                           decoration: InputDecoration(
-                            hintText: 'CAMILA TESTE',
+                            hintText: 'Nome do titular',
                             border: const OutlineInputBorder(),
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
@@ -310,7 +310,7 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
                         TextField(
                           controller: _numeroCartaoController,
                           decoration: InputDecoration(
-                            hintText: '4111 1111 1111 1111',
+                            hintText: 'Número do cartão',
                             border: const OutlineInputBorder(),
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
@@ -459,7 +459,7 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
                         TextField(
                           controller: _cepController,
                           decoration: InputDecoration(
-                            hintText: '80210-010',
+                            hintText: 'CEP',
                             border: const OutlineInputBorder(),
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
@@ -482,7 +482,7 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Digite um CEP válido (ex: 80210-010, 01311-000)',
+                          'Digite um CEP válido',
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 12,
