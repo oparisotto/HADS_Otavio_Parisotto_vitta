@@ -24,14 +24,46 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Pagamento vencido. Usuário bloqueado para check-in." });
     }
 
+    // Busca o plano do pagamento
+    const planoId = pagamento.rows[0].plano_id;
+    const plano = await pool.query("SELECT * FROM planos WHERE id = $1", [planoId]);
+
+    if (plano.rows.length === 0) {
+      return res.status(400).json({ message: "Plano associado ao pagamento não encontrado." });
+    }
+
+    const limiteCheckins = plano.rows[0].limite_checkins;
+
+    // Conta quantos check-ins o usuário já fez neste mês
+    const checkinsMes = await pool.query(
+      `SELECT COUNT(*) FROM checkins 
+       WHERE usuario_id = $1 
+       AND DATE_PART('month', data_checkin) = DATE_PART('month', CURRENT_DATE)
+       AND DATE_PART('year', data_checkin) = DATE_PART('year', CURRENT_DATE)`,
+      [usuario_id]
+    );
+
+    const totalCheckinsMes = parseInt(checkinsMes.rows[0].count);
+
+    if (totalCheckinsMes >= limiteCheckins) {
+      return res.status(400).json({ 
+        message: `Limite de ${limiteCheckins} check-ins mensais atingido para o seu plano.` 
+      });
+    }
+
     // Insere novo check-in
     const novoCheckin = await pool.query(
       "INSERT INTO checkins (usuario_id) VALUES ($1) RETURNING *",
       [usuario_id]
     );
 
-    res.status(201).json({ message: "Check-in realizado com sucesso!", checkin: novoCheckin.rows[0] });
+    res.status(201).json({ 
+      message: "Check-in realizado com sucesso!", 
+      checkin: novoCheckin.rows[0],
+      checkinsRestantes: limiteCheckins - (totalCheckinsMes + 1)
+    });
   } catch (err) {
+    console.error("Erro ao realizar check-in:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -72,53 +104,6 @@ router.get("/stats/:usuario_id", async (req, res) => {
     });
   } catch (err) {
     console.error('Erro ao buscar estatísticas:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Rota GET: check-ins totais por dia com preenchimento de dias sem check-in
-router.get("/", async (req, res) => {
-  const { inicio, fim } = req.query; // datas opcionais: YYYY-MM-DD
-
-  try {
-    if (!inicio || !fim) {
-      return res.status(400).json({ message: "Parâmetros 'inicio' e 'fim' são obrigatórios." });
-    }
-
-    // Consulta os check-ins existentes
-    const result = await pool.query(
-      `
-      SELECT 
-        TO_CHAR(data_checkin, 'YYYY-MM-DD') AS data,
-        COUNT(*) AS total
-      FROM checkins
-      WHERE data_checkin BETWEEN $1 AND $2
-      GROUP BY data_checkin
-      ORDER BY data_checkin ASC
-      `,
-      [inicio, fim]
-    );
-
-    const checkinsExistentes = result.rows.reduce((acc, item) => {
-      acc[item.data] = parseInt(item.total);
-      return acc;
-    }, {});
-
-    // Preenche todos os dias do período com 0 caso não haja check-ins
-    const dias = [];
-    const dataInicio = new Date(inicio);
-    const dataFim = new Date(fim);
-
-    for (let d = new Date(dataInicio); d <= dataFim; d.setDate(d.getDate() + 1)) {
-      const dataStr = d.toISOString().split("T")[0];
-      dias.push({
-        data: dataStr,
-        total: checkinsExistentes[dataStr] || 0
-      });
-    }
-
-    res.json(dias); // [{data: '2025-09-12', total: 0}, ...]
-  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
