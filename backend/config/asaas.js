@@ -2,7 +2,7 @@ const axios = require('axios');
 
 class AsaasAPI {
   constructor() {
-    this.apiKey = '$aact_hmlg_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OmNkMDUxNWM5LTZiZTQtNDUzYy1hMWM5LThiOTUyZGFlODAwMTo6JGFhY2hfODkxZTVkOWEtNWE4ZC00OWU4LThmYWQtZmM2YTkyMTAyNWMz';
+    this.apiKey = '$aact_hmlg_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OmI3NTE1NzA5LTg1MjUtNDgwZC1iOTBmLWVlZDIzYjU0MGQzMjo6JGFhY2hfYjk3NzYxNzktMmQ2YS00NzExLTlhNDQtZTFjODQyMTMzMWY5';
     this.baseURL = 'https://sandbox.asaas.com/api/v3';
     
     this.client = axios.create({
