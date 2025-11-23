@@ -10,12 +10,10 @@ export default function Alunos() {
   const [atualizar, setAtualizar] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // 🔄 FUNÇÃO PARA RECARREGAR DADOS
   const fetchDados = async () => {
     try {
       setLoading(true);
-      console.log("🔄 Buscando dados atualizados...");
-      
+
       const [usuariosRes, pagamentosRes, planosRes] = await Promise.all([
         axios.get("http://localhost:3000/usuarios"),
         axios.get("http://localhost:3000/pagamentos"),
@@ -25,8 +23,6 @@ export default function Alunos() {
       setUsuarios(usuariosRes.data);
       setPagamentos(pagamentosRes.data);
       setPlanos(planosRes.data);
-
-      console.log("✅ Dados atualizados carregados");
     } catch (err) {
       console.error("Erro ao carregar dados:", err);
       alert("Erro ao carregar dados dos alunos");
@@ -39,23 +35,29 @@ export default function Alunos() {
     fetchDados();
   }, [atualizar]);
 
-  // 🔄 MONTAR LISTA DE ALUNOS - CORRIGIDO
+  // 🔎 JUNTAR INFO DO ALUNO COM PAGAMENTO
   const alunos = usuarios.map((usuario) => {
-    // PEGAR PLANO ATUAL
-    const planoAtual = usuario.plano_atual_id
-      ? planos.find((p) => Number(p.id) === Number(usuario.plano_atual_id))
-      : null;
+    const pagamentosUsuario = pagamentos
+      .filter((p) => Number(p.usuario_id) === Number(usuario.id))
+      .sort((a, b) => new Date(b.data_criacao) - new Date(a.data_criacao));
 
-    // 🚀 AGORA O STATUS VEM 100% DE "status_plano"
-    let status = usuario.status_plano || "sem_plano";
+    const ultimoPagamento = pagamentosUsuario[0];
+    console.log("Último pagamento do usuário:", usuario.nome, ultimoPagamento);
+
+    let status = ultimoPagamento ? ultimoPagamento.status : "sem_plano";
 
     let statusDisplay = {
+      pago: "Ativo",
       ativo: "Ativo",
       atrasado: "Atrasado",
       inativo: "Inativo",
       cancelado: "Cancelado",
       sem_plano: "Sem plano",
     }[status] || "Sem plano";
+
+    const planoAtual = usuario.plano_atual_id
+      ? planos.find((p) => Number(p.id) === Number(usuario.plano_atual_id))
+      : null;
 
     return {
       id: usuario.id,
@@ -65,11 +67,9 @@ export default function Alunos() {
       status_display: statusDisplay,
       plano: planoAtual ? planoAtual.nome : "Sem Plano",
       plano_atual_id: usuario.plano_atual_id,
-      tem_plano: !!planoAtual,
     };
   });
 
-  // 🔍 APLICAR FILTRO E PESQUISA
   const alunosFiltrados = alunos.filter((aluno) => {
     const correspondePesquisa =
       aluno.nome.toLowerCase().includes(pesquisa.toLowerCase()) ||
@@ -79,7 +79,7 @@ export default function Alunos() {
 
     switch (filtro) {
       case "ativo":
-        correspondeFiltro = aluno.status === "ativo";
+        correspondeFiltro = aluno.status_display === "Ativo";
         break;
       case "atrasado":
         correspondeFiltro = aluno.status === "atrasado";
@@ -100,10 +100,10 @@ export default function Alunos() {
     return correspondeFiltro && correspondePesquisa;
   });
 
-  // 🎨 CORES DOS STATUS
   const corStatus = (status) => {
     switch (status) {
       case "ativo":
+      case "pago":
         return "text-green-600 bg-green-50 font-medium px-2 py-1 rounded";
       case "atrasado":
         return "text-orange-600 bg-orange-50 font-medium px-2 py-1 rounded";
@@ -116,7 +116,6 @@ export default function Alunos() {
     }
   };
 
-  // LOADING
   if (loading) {
     return (
       <div className="p-6 bg-gray-50 min-h-screen flex items-center justify-center">
@@ -128,13 +127,13 @@ export default function Alunos() {
     );
   }
 
-  // TELA
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      {/* CABEÇALHO */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Gestão de Alunos</h1>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">
+            Gestão de Alunos
+          </h1>
           <p className="text-gray-600">Total: {alunos.length} alunos</p>
         </div>
 
@@ -164,16 +163,24 @@ export default function Alunos() {
             onClick={() => setAtualizar((prev) => prev + 1)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
             </svg>
             Atualizar
           </button>
         </div>
       </div>
 
-      {/* TABELA */}
       <div className="bg-white shadow-lg rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
@@ -188,12 +195,19 @@ export default function Alunos() {
             <tbody>
               {alunosFiltrados.length > 0 ? (
                 alunosFiltrados.map((aluno) => (
-                  <tr key={aluno.id} className="border-b border-gray-200 hover:bg-gray-50">
+                  <tr
+                    key={aluno.id}
+                    className="border-b border-gray-200 hover:bg-gray-50"
+                  >
                     <td className="p-4">
-                      <div className="font-medium text-gray-900">{aluno.nome}</div>
-                      <div className="text-xs text-gray-500">ID: {aluno.id}</div>
+                      <div className="font-medium text-gray-900">
+                        {aluno.nome}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        ID: {aluno.id}
+                      </div>
                     </td>
-                    
+
                     <td className="p-4">
                       <a
                         href={`mailto:${aluno.email}`}
@@ -202,13 +216,13 @@ export default function Alunos() {
                         {aluno.email}
                       </a>
                     </td>
-                    
+
                     <td className="p-4">
                       <span className={corStatus(aluno.status)}>
                         {aluno.status_display}
                       </span>
                     </td>
-                    
+
                     <td className="p-4">
                       <div className="text-sm font-medium text-gray-900">
                         {aluno.plano}
